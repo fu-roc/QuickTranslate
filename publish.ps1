@@ -25,7 +25,9 @@ if (-not $dotnet) {
 }
 
 $flavor = if ($SelfContained) { 'self-contained' } else { 'framework-dependent' }
-$name = "QuickTranslate-$(Get-Date -Format 'yyyyMMdd')-win-x64-$flavor"
+# Include the time so every run writes a brand-new artifact: no overwrite, no delete.
+# Overwriting a same-day zip can fail when Defender or a file manager holds it open.
+$name = "QuickTranslate-$(Get-Date -Format 'yyyyMMdd-HHmmss')-win-x64-$flavor"
 $staging = Join-Path $OutputDir $name
 $publishDir = Join-Path $staging 'QuickTranslate'
 
@@ -54,10 +56,13 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXIT
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $publishDir
 
 $zip = Join-Path $OutputDir "$name.zip"
+# Each run uses a fresh timestamped name, so no -Force / no delete is needed
+# (Compress-Archive -Force deletes the old file first, which some managed
+# environments block with a safe-delete guard, and an in-use zip cannot be
+# overwritten at all).
 # Pass the files, not the folder: Windows PowerShell 5.1 writes backslash-separated
 # entry names when archiving a directory, which breaks some unzip tools.
-# -Force overwrites a same-day archive so re-runs stay idempotent.
-Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zip -CompressionLevel Optimal -Force
+Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zip -CompressionLevel Optimal
 
 $mb = [math]::Round((Get-Item -LiteralPath $zip).Length / 1MB, 1)
 Write-Host "OK: $zip ($mb MB)"

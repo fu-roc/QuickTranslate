@@ -44,7 +44,7 @@ public partial class App : System.Windows.Application
         _tray = new TrayService(OpenSettings, ExitApplication);
 
         RegisterHotkeys();
-        SyncAutoStart();
+        CheckAutoStart();
 
         if (createdNewConfig || !_config.IsConfigured)
         {
@@ -54,14 +54,14 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// 已开启自启时，校正 Run 项指向当前 exe：程序被移动或重新发布后启动项不会指向旧文件。
-    /// 路径本来就正确时不做任何写入。
+    /// 只读检查开机自启状态，绝不在此处写注册表。
+    /// 未签名 exe 在启动阶段写 HKCU\...\Run 会被 Defender 的
+    /// Behavior:Win32/Persistence.A!ml 判为「持久化」并隔离删除整个程序。
     /// </summary>
-    private void SyncAutoStart()
+    private void CheckAutoStart()
     {
-        if (!AutoStartService.IsEnabled()) return;
-        string? error = AutoStartService.Sync();
-        if (error is not null) _tray.Notify($"开机自启：{error}");
+        string? notice = AutoStartService.Check();
+        if (notice is not null) _tray.Notify($"开机自启：{notice}");
     }
 
     private void RegisterHotkeys()
@@ -209,10 +209,15 @@ public partial class App : System.Windows.Application
         if (!string.IsNullOrEmpty(failure)) return failure;
 
         bool previousAutoStart = AutoStartService.IsEnabled();
-        string? autoStartError = AutoStartService.Apply(autoStart);
-        if (autoStartError is not null)
+        // 只在用户真的改动了自启开关时才写注册表，避免每次保存设置都产生一次
+        // 「写自启项」行为（未签名程序反复写 Run 项容易触发 Defender 行为检测）。
+        if (autoStart != previousAutoStart)
         {
-            return $"开机自启：{autoStartError}";
+            string? autoStartError = AutoStartService.Apply(autoStart);
+            if (autoStartError is not null)
+            {
+                return $"开机自启：{autoStartError}";
+            }
         }
 
         try
@@ -222,7 +227,7 @@ public partial class App : System.Windows.Application
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
         {
             // 配置没写进去就把系统状态改了会造成不一致，尽力回滚
-            AutoStartService.Apply(previousAutoStart);
+            if (autoStart != previousAutoStart) AutoStartService.Apply(previousAutoStart);
             return $"配置保存失败：{ex.Message}";
         }
 

@@ -57,7 +57,7 @@
 
 - **实现**：写入当前用户的 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下名为 `QuickTranslate` 的字符串值，指向当前 exe（路径带引号，兼容含空格的目录）。只写 HKCU，**不需要管理员权限**，也不创建开始菜单快捷方式或计划任务。
 - **不写进 config.json**：注册表项本身就是唯一状态来源。这样在任务管理器「启动应用」里禁用、或被清理软件删掉之后，设置页会如实显示未启用，不会出现「配置说开了、系统其实没开」的两套说法。
-- **搬家自愈**：程序被移动或重新发布后，下次启动会自动把旧的启动项路径更新为当前 exe；路径本来就正确时不会动注册表。
+- **启动时只读、不自动改写**：程序被移动后，启动时只检查并给一条托盘提示，要你到设置页重新勾选才更新路径。**故意不在启动阶段写注册表** —— 未签名 exe 自动写自启项会触发 Defender 的 `Behavior:Win32/Persistence.A!ml` 行为检测并把整个程序隔离，详见下一节。
 - **同名项保护**：如果那个 Run 值指向的是其他程序，程序不会覆盖或删除它，设置页会给出中文提示。
 - **保存是事务式的**：热键全部注册成功、启动项写入成功、配置写盘成功，三件事都完成才生效；任一步失败会回滚已做的改动，窗口不关闭、配置不落盘。
 - 也可以在 `任务管理器 → 启动应用` 里禁用；禁用后设置页的勾选框会显示为未勾选。若要彻底清除，取消勾选并保存即可删除该注册表值。
@@ -86,7 +86,7 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 
 ## 分发方式
 
-推荐 **zip 便携版**（单文件 exe + 本说明），不做安装包：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。GitHub Release 直接传一个 zip 即可。
+推荐 **zip 便携版**（单文件 exe + 本说明），不做安装包：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。GitHub Release 直接传一个 zip 即可。注意未签名 exe 首次运行可能被 Defender 拦截，见下文「被 Windows Defender / SmartScreen 拦截」。
 
 生成 zip（PowerShell，项目根目录执行）：
 
@@ -95,12 +95,37 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 25 MB�
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 190 MB，目标机零依赖
 ```
 
-产物在 `artifacts/`（已加入 `.gitignore`），文件名带日期和形态，zip 内是单文件 exe 加本说明。脚本会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
+产物在 `artifacts/`（已加入 `.gitignore`），文件名带日期时间和形态 —— 每次运行都生成新文件，不覆盖旧包、不删除任何东西，避免同名 zip 正在被安全软件扫描时无法覆写。zip 内是单文件 exe 加本说明，脚本会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
 
 - 解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次，再到设置里重新勾选开机自启 —— 自启项记录的是 exe 绝对路径，移动目录会让它失效。
 - 覆盖更新前先从托盘「退出」，否则 exe 被占用会替换失败。
 - 目标机没装 .NET 10 Desktop Runtime 时，先装运行时，或改用 190 MB 的自包含单文件版。
 - 安装包（MSI / Inno Setup）只在需要开始菜单与卸载入口、自动更新、固定安装路径时才值得做，代价是升级逻辑、卸载时清理启动项、代码签名等长期维护。
+
+## 被 Windows Defender / SmartScreen 拦截
+
+从 zip 或 GitHub 下载的**未签名 exe** 首次运行，可能弹出「无法成功完成操作，因为文件包含病毒或潜在的垃圾软件」或「Windows 已保护你的电脑」，文件甚至会被直接删掉。
+
+**这不是病毒，是误报。** 程序没有代码签名，Defender 对一个刚编译出来、全网没有下载记录的 exe 本来就没有信誉数据。本项目实测触发过 `Behavior:Win32/Persistence.A!ml`（严重级别 5，**行为型**「持久化」检测）：早先版本会在**程序启动时自动改写** `HKCU\...\Run` 自启项，未签名 exe 主动写自启动注册表，正好符合恶意软件驻留的行为特征，Defender 因此隔离删除了 exe，连 Run 项一起清掉。
+
+**代码侧已修**：启动阶段只读检查启动项、绝不写注册表；只有你在设置页明确改动「开机自动启动」开关并点「保存」时才写一次，路径已正确时连这一次也不写。
+
+如果仍被拦截，按这个顺序处理：
+
+1. 打开 `Windows 安全中心 → 病毒和威胁防护 → 保护历史记录`，找到对应时间的 `Behavior:Win32/Persistence.A!ml` 条目，展开后点「操作 → 在设备上允许 / 还原」，把被隔离的 exe 放回来。
+2. **先把 zip 完整解压到一个固定目录**（例如 `%LOCALAPPDATA%\QuickTranslate\`），再从那里双击。不要直接在压缩软件里双击 zip 内的 exe —— 那会在 `%TEMP%` 临时目录里解压运行，从临时目录启动未签名程序更可疑。
+3. 给这个固定目录加一条范围最小的防病毒排除项（需管理员权限）：
+
+   ```powershell
+   Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\QuickTranslate"
+   ```
+
+   图形界面：`Windows 安全中心 → 病毒和威胁防护 → 管理设置 → 排除项 → 添加文件夹`。
+4. 如果只是 SmartScreen 的「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」即可，一次放行后不再提示。
+
+**根治办法是代码签名**（OV / EV 证书，需购买），或把 exe 提交给微软误报申诉：<https://www.microsoft.com/en-us/wdsi/filesubmission>。本项目自用、不做正式分发，因此没有签名。
+
+> 排除项等于让 Defender 不再扫描那个目录，请只对确认是自己构建的程序目录使用，不要对整个项目根目录、`Downloads` 或用户目录加白。
 
 ## 设计与已知限制
 
@@ -111,7 +136,8 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 190 MB
 - **截图框选只覆盖光标所在的那一块屏幕**，不支持跨屏拖拽。选区用 Win32 物理像素坐标确定，因此截图内容不受多屏不同 DPI 缩放影响；但覆盖层在副屏的视觉定位可能有偏移。
 - **翻译必须联网**：走百度通用文本翻译 API，断网会明确报错。免费额度与接口规则由百度决定，可能变动。
 - **OCR 依赖系统语言包**：没装对应语言包会提示去系统设置添加。识别超大图片前会按 `OcrEngine.MaxImageDimension` 自动缩放。
-- **开机自启默认关闭**：可在设置页勾选，实现方式是 HKCU 的 Run 项，详见上文。不写计划任务、不需要管理员权限。
+- **开机自启默认关闭**：可在设置页勾选，实现方式是 HKCU 的 Run 项，详见上文。不写计划任务、不需要管理员权限；启动阶段不写注册表，避免触发杀软的行为检测。
+- **未做代码签名**：exe 可能被 Defender / SmartScreen 拦截，首次运行的处置见上文「被 Windows Defender / SmartScreen 拦截」。
 - 程序以 `asInvoker` 权限运行，不请求管理员权限。
 
 ## 目录结构
@@ -133,7 +159,7 @@ QuickTranslate/
     │   ├── BaiduTranslator.cs     签名、请求、错误码中文化
     │   ├── ScreenCaptureService.cs 物理像素截图
     │   ├── OcrService.cs          Windows.Media.Ocr 识别
-    │   ├── AutoStartService.cs    HKCU Run 开机自启与路径自愈
+    │   ├── AutoStartService.cs    HKCU Run 开机自启（启动只读校验、仅显式保存时写入）
     │   └── TrayService.cs         系统托盘
     └── Windows/
         ├── ResultWindow.xaml      光标旁悬浮结果窗
