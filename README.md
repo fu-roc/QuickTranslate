@@ -74,7 +74,33 @@ dotnet run --project src/QuickTranslate/QuickTranslate.csproj -c Debug
 dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --self-contained false
 ```
 
-发布为 framework-dependent，目标机需装 .NET 10 Desktop Runtime；若要单文件免安装，把 `--self-contained` 改为 `true`（体积约 60 MB）。
+三种发布形态（本机实测，Release / win-x64）：
+
+| 形态 | 关键参数 | 产物 | 体积 | 目标机要求 |
+| --- | --- | --- | --- | --- |
+| 框架依赖 | `--self-contained false` | 6 个文件 | 25 MB | .NET 10 Desktop Runtime |
+| **框架依赖 + 单文件（推荐）** | 再加 `-p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true` | 1 个 exe | 25 MB | .NET 10 Desktop Runtime |
+| 自包含单文件 | `--self-contained true` + 上面三个单文件参数 | 1 个 exe | **190 MB** | 无 |
+
+体积主要来自 WinRT 投影 `Microsoft.Windows.SDK.NET.dll`（24 MB）；自包含还会打包整套 WPF 运行时，首次启动需自解压到 `%TEMP%\.net`。
+
+## 分发方式
+
+推荐 **zip 便携版**（单文件 exe + 本说明），不做安装包：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。GitHub Release 直接传一个 zip 即可。
+
+生成 zip（PowerShell，项目根目录执行）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 25 MB，需 .NET 10 Desktop Runtime
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 190 MB，目标机零依赖
+```
+
+产物在 `artifacts/`（已加入 `.gitignore`），文件名带日期和形态，zip 内是单文件 exe 加本说明。脚本会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
+
+- 解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次，再到设置里重新勾选开机自启 —— 自启项记录的是 exe 绝对路径，移动目录会让它失效。
+- 覆盖更新前先从托盘「退出」，否则 exe 被占用会替换失败。
+- 目标机没装 .NET 10 Desktop Runtime 时，先装运行时，或改用 190 MB 的自包含单文件版。
+- 安装包（MSI / Inno Setup）只在需要开始菜单与卸载入口、自动更新、固定安装路径时才值得做，代价是升级逻辑、卸载时清理启动项、代码签名等长期维护。
 
 ## 设计与已知限制
 

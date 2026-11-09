@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private const int OcrHotkeyId = 2;
 
     private Mutex? _singletonMutex;
+    private bool _ownsSingletonMutex;
     private AppConfig _config = null!;
     private HotkeyService _hotkeys = null!;
     private TrayService _tray = null!;
@@ -26,6 +27,7 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         _singletonMutex = new Mutex(true, @"Local\QuickTranslate.Singleton", out bool createdNew);
+        _ownsSingletonMutex = createdNew;
         if (!createdNew)
         {
             MessageBox.Show("QuickTranslate 已经在运行了。", "QuickTranslate",
@@ -254,7 +256,12 @@ public partial class App : System.Windows.Application
     {
         _hotkeys?.Dispose();
         _tray?.Dispose();
-        _singletonMutex?.ReleaseMutex();
+        // 命名 Mutex 已存在时当前线程并不拥有它，无条件 ReleaseMutex 会在退出时抛未处理异常
+        if (_ownsSingletonMutex)
+        {
+            try { _singletonMutex?.ReleaseMutex(); }
+            catch (ApplicationException) { /* 退出阶段无需上报 */ }
+        }
         _singletonMutex?.Dispose();
         base.OnExit(e);
     }
