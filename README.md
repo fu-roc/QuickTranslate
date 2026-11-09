@@ -13,6 +13,17 @@
 
 两个快捷键都可以自定义：托盘右键 → 设置 → 点对应行右侧的「录制」，直接按下想要的组合键即可录入（`Esc` 取消录制，`Backspace` 清空）；也可以像以前一样手动填写字符串。点「恢复默认快捷键」可一键回到 `Alt+T` / `Alt+S`。
 
+## 下载与安装
+
+到 [GitHub Releases](https://github.com/fu-roc/QuickTranslate/releases) 下载最新版，两种产物内容相同，**二选一**：
+
+| 产物 | 适合 | 说明 |
+| --- | --- | --- |
+| `...-framework-dependent.zip` 便携版 | 想绿色免安装 | 解压到固定目录，双击单文件 exe 即用；不写安装信息、不建卸载入口，升级就是替换 exe |
+| `...-win-x64-setup-*.exe` 安装包 | 想要开始菜单和卸载入口 | 中文安装向导，默认装到 `%LOCALAPPDATA%\QuickTranslate`，用户级安装、无需管理员权限；可在「设置 → 应用」卸载，卸载不会删你的配置 |
+
+两者都需要目标机安装 .NET 10 Desktop Runtime（见下节）。安装包**不会创建开机自启项** —— 未签名程序写 `HKCU\...\Run` 会触发 Defender 的持久化行为检测；需要自启请在程序设置页勾选。未签名文件首次运行可能被 SmartScreen / Defender 拦截，处置见下文对应章节。
+
 ## 环境要求
 
 - Windows 10 2004（build 19041）或更高，已验证 Windows 11 专业版 26300
@@ -23,7 +34,7 @@
 ## 首次配置
 
 1. 打开 <https://fanyi-api.baidu.com/>，注册并完成个人认证，开通「通用文本翻译 API」，在开发者信息页拿到 APPID 和密钥。
-2. 构建并运行程序。首次启动会在 `%APPDATA%\QuickTranslate\config.json` 生成配置模板并自动打开设置窗口。
+2. 从 Release 下载安装（或解压便携版），运行程序。首次启动会在 `%APPDATA%\QuickTranslate\config.json` 生成配置模板并自动打开设置窗口。
 3. 填入 APPID、密钥；快捷键可用「录制」按键录入或手动填写；选好目标语言、按需勾选「开机自动启动」后保存。
 4. 试着选中一段英文按 `Alt+T`。托盘图标右键可随时打开设置或退出。
 
@@ -86,21 +97,26 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 
 ## 分发方式
 
-推荐 **zip 便携版**（单文件 exe + 本说明），不做安装包：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。GitHub Release 直接传一个 zip 即可。注意未签名 exe 首次运行可能被 Defender 拦截，见下文「被 Windows Defender / SmartScreen 拦截」。
+两种产物都由脚本生成，并作为 [GitHub Release](https://github.com/fu-roc/QuickTranslate/releases) 附件发布。默认推荐 **zip 便携版**：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。**安装包**是给需要开始菜单与正规卸载入口的场景用的可选形态。
 
-生成 zip（PowerShell，项目根目录执行）：
+生成产物（PowerShell，项目根目录执行）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 25 MB，需 .NET 10 Desktop Runtime
-powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 190 MB，目标机零依赖
+powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，25 MB，需 .NET 10 Desktop Runtime
+powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，190 MB，目标机零依赖
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1          # 安装包，取 artifacts 里最新的 exe
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.1
 ```
 
-产物在 `artifacts/`（已加入 `.gitignore`），文件名带日期时间和形态 —— 每次运行都生成新文件，不覆盖旧包、不删除任何东西，避免同名 zip 正在被安全软件扫描时无法覆写。zip 内是单文件 exe 加本说明，脚本会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
+生成安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`）：脚本会依次在 `-ISCC` 参数、PATH、常见安装目录、便携目录里查找。`packaging/setup.iss` 是安装定义，`packaging/ChineseSimplified.isl` 是官方仓库的简体中文语言包。
+
+产物都在 `artifacts/`（已加入 `.gitignore`），文件名带日期时间和形态 —— 每次运行都生成新文件，不覆盖旧包、不删除任何东西，避免同名文件正在被安全软件扫描时无法覆写。zip 内是单文件 exe 加本说明，`publish.ps1` 会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
 
 - 解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次，再到设置里重新勾选开机自启 —— 自启项记录的是 exe 绝对路径，移动目录会让它失效。
 - 覆盖更新前先从托盘「退出」，否则 exe 被占用会替换失败。
 - 目标机没装 .NET 10 Desktop Runtime 时，先装运行时，或改用 190 MB 的自包含单文件版。
-- 安装包（MSI / Inno Setup）只在需要开始菜单与卸载入口、自动更新、固定安装路径时才值得做，代价是升级逻辑、卸载时清理启动项、代码签名等长期维护。
+- 安装包默认装到固定路径 `%LOCALAPPDATA%\QuickTranslate`，因此没有「移动目录导致自启失效」的问题；但**它不写任何自启项**，需要自启仍要在设置页勾选一次。安装前若程序正在运行，安装向导会提示先退出，避免 exe 被占用导致替换失败。
+- 两种形态都没有代码签名，首次运行都可能被 SmartScreen 提示；根治只能买证书做签名，自用项目未做。
 
 ## 被 Windows Defender / SmartScreen 拦截
 
@@ -145,6 +161,14 @@ powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 190 MB
 ```
 QuickTranslate/
 ├── QuickTranslate.slnx
+├── README.md
+├── .gitignore
+├── publish.ps1                  便携版 zip 发布脚本
+├── build-installer.ps1           Inno Setup 安装包生成脚本
+├── packaging/
+│   ├── setup.iss                 安装定义（无自启项，中文向导）
+│   └── ChineseSimplified.isl     Inno Setup 官方简体中文语言包
+├── artifacts/                   构建产物（gitignore，不进仓库）
 └── src/QuickTranslate/
     ├── App.xaml(.cs)              启动编排、托盘、两条链路调度、配置事务
     ├── app.manifest               PerMonitorV2 高 DPI 声明
