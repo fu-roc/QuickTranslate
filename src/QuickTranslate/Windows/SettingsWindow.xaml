@@ -1,0 +1,107 @@
+<Window x:Class="QuickTranslate.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QuickTranslate 设置"
+        Width="440"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        PreviewKeyDown="Window_OnPreviewKeyDown"
+        PreviewMouseDown="Window_OnPreviewMouseDown">
+    <StackPanel Margin="18">
+        <TextBlock Text="百度翻译 API" FontSize="14" FontWeight="Medium" Margin="0,0,0,10" />
+
+        <TextBlock Text="APPID" FontSize="12" Foreground="#6B7280" />
+        <TextBox x:Name="AppIdBox" Margin="0,3,0,10" Padding="5" />
+
+        <TextBlock Text="密钥" FontSize="12" Foreground="#6B7280" />
+        <PasswordBox x:Name="SecretBox" Margin="0,3,0,10" Padding="5" />
+
+        <TextBlock Text="快捷键（点「录制」后直接按下组合键，也可以手动填写）"
+                   FontSize="12"
+                   Foreground="#6B7280"
+                   TextWrapping="Wrap"
+                   Margin="0,2,0,8" />
+
+        <TextBlock Text="取词翻译" FontSize="12" Foreground="#6B7280" />
+        <Grid Margin="0,3,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="TakeWordBox"
+                     Grid.Column="0"
+                     Padding="5"
+                     VerticalContentAlignment="Center"
+                     ToolTip="例如 Alt+T、Ctrl+Shift+T、Win+Alt+D；点右侧「录制」可直接按键录入" />
+            <Button x:Name="TakeWordRecordButton"
+                    Grid.Column="1"
+                    Content="录制"
+                    Width="58"
+                    Margin="6,0,0,0"
+                    Padding="4"
+                    Click="Record_OnClick" />
+        </Grid>
+
+        <TextBlock Text="截图 OCR" FontSize="12" Foreground="#6B7280" />
+        <Grid Margin="0,3,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="OcrBox"
+                     Grid.Column="0"
+                     Padding="5"
+                     VerticalContentAlignment="Center"
+                     ToolTip="例如 Alt+S；点右侧「录制」可直接按键录入" />
+            <Button x:Name="OcrRecordButton"
+                    Grid.Column="1"
+                    Content="录制"
+                    Width="58"
+                    Margin="6,0,0,0"
+                    Padding="4"
+                    Click="Record_OnClick" />
+        </Grid>
+
+        <TextBlock Text="目标语言" FontSize="12" Foreground="#6B7280" />
+        <ComboBox x:Name="LanguageBox" SelectedValuePath="Tag" Margin="0,3,0,14" Padding="5">
+            <ComboBoxItem Tag="zh" Content="简体中文" />
+            <ComboBoxItem Tag="cht" Content="繁体中文" />
+            <ComboBoxItem Tag="en" Content="英语" />
+            <ComboBoxItem Tag="jp" Content="日语" />
+            <ComboBoxItem Tag="kor" Content="韩语" />
+            <ComboBoxItem Tag="fra" Content="法语" />
+            <ComboBoxItem Tag="de" Content="德语" />
+            <ComboBoxItem Tag="spa" Content="西班牙语" />
+            <ComboBoxItem Tag="ru" Content="俄语" />
+        </ComboBox>
+
+        <CheckBox x:Name="AutoStartBox"
+                  Content="开机自动启动"
+                  FontSize="13"
+                  Margin="0,0,0,4" />
+        <TextBlock Text="登录 Windows 后自动在托盘运行。写入当前用户的「启动」项，无需管理员权限；程序换位置后会在下次启动时自动更新路径。也可在任务管理器的「启动应用」中禁用。"
+                   FontSize="11"
+                   Foreground="#6B7280"
+                   Margin="20,0,0,14"
+                   TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="恢复默认快捷键" Width="116" Margin="0,0,8,0" Padding="6" Click="ResetHotkeys_OnClick" />
+            <Button Content="保存" Width="80" Margin="0,0,8,0" Padding="6" Click="Save_OnClick" />
+            <Button Content="取消" Width="80" Padding="6" Click="Cancel_OnClick" />
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText"
+                   Foreground="#C0392B"
+                   FontSize="12"
+                   MinHeight="18"
+                   Margin="0,10,0,0"
+                   TextWrapping="Wrap" />
+        <TextBlock Text="配置保存在 %APPDATA%\QuickTranslate\config.json，请勿把填写后的文件公开。"
+                   FontSize="11"
+                   Foreground="#9AA0A6"
+                   Margin="0,8,0,0"
+                   TextWrapping="Wrap" />
+    </StackPanel>
+</Window>
