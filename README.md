@@ -20,9 +20,9 @@
 | 产物 | 适合 | 说明 |
 | --- | --- | --- |
 | `...-framework-dependent.zip` 便携版 | 想绿色免安装 | 解压到固定目录，双击单文件 exe 即用；不写安装信息、不建卸载入口，升级就是替换 exe |
-| `...-win-x64-setup-*.exe` 安装包 | 想要开始菜单和卸载入口 | 中文安装向导，默认装到 `%LOCALAPPDATA%\QuickTranslate`，用户级安装、无需管理员权限；可在「设置 → 应用」卸载，卸载不会删你的配置 |
+| `...-win-x64-setup-*.exe` 安装包 | 想要开始菜单和卸载入口 | 中文安装向导，默认装到 `C:\Program Files\QuickTranslate`，**系统级安装：双击时需 UAC 管理员授权**，写 HKLM 卸载项与「所有用户」开始菜单；可在「设置 → 应用」卸载，卸载不会删你的配置 |
 
-两者都需要目标机安装 .NET 10 Desktop Runtime（见下节）。安装包**不会创建开机自启项** —— 未签名程序写 `HKCU\...\Run` 会触发 Defender 的持久化行为检测；需要自启请在程序设置页勾选。未签名文件首次运行可能被 SmartScreen / Defender 拦截，处置见下文对应章节。
+两者都需要目标机安装 .NET 10 Desktop Runtime（见下节）。注意区分：**安装过程**需要管理员权限，**装好的程序**仍以普通权限（`asInvoker`）常驻托盘，不会请求提权。安装包**不会创建开机自启项** —— 未签名程序写 `HKCU\...\Run` 会触发 Defender 的持久化行为检测；需要自启请在程序设置页勾选。未签名文件首次运行可能被 SmartScreen / Defender 拦截，处置见下文对应章节。
 
 ## 环境要求
 
@@ -97,7 +97,7 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 
 ## 分发方式
 
-两种产物都由脚本生成，并作为 [GitHub Release](https://github.com/fu-roc/QuickTranslate/releases) 附件发布。默认推荐 **zip 便携版**：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。**安装包**是给需要开始菜单与正规卸载入口的场景用的可选形态。
+两种产物都由脚本生成，并作为 [GitHub Release](https://github.com/fu-roc/QuickTranslate/releases) 附件发布。默认推荐 **zip 便携版**：无需管理员权限、不写安装信息、不建卸载入口，升级就是替换 exe，配置在 `%APPDATA%` 不受影响，与「极简、绿色」的目标一致。**安装包**是给需要系统级安装、所有用户共享的开始菜单与正规卸载入口的场景用的可选形态（v1.0.1 起由用户级改为系统级）。
 
 生成产物（PowerShell，项目根目录执行）：
 
@@ -105,17 +105,17 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，25 MB，需 .NET 10 Desktop Runtime
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，190 MB，目标机零依赖
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1          # 安装包，取 artifacts 里最新的 exe
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.1
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.2
 ```
 
-生成安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`）：脚本会依次在 `-ISCC` 参数、PATH、常见安装目录、便携目录里查找。`packaging/setup.iss` 是安装定义，`packaging/ChineseSimplified.isl` 是官方仓库的简体中文语言包。
+生成安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`）：脚本会依次在 `-ISCC` 参数、PATH、常见安装目录、便携目录里查找。`packaging/setup.iss` 是安装定义（`PrivilegesRequired=admin`、`{autopf}`、`{commonprograms}` / `{commondesktop}`，安装完成后的启动项用 `runasoriginaluser` 以免程序继承管理员令牌），`packaging/ChineseSimplified.isl` 是官方仓库的简体中文语言包。注意 Inno Setup 的 `Setup.exe` 自身 manifest 仍是 `asInvoker`，提权靠内部 `runas` 重启，不能用 manifest 判断安装级别。
 
 产物都在 `artifacts/`（已加入 `.gitignore`），文件名带日期时间和形态 —— 每次运行都生成新文件，不覆盖旧包、不删除任何东西，避免同名文件正在被安全软件扫描时无法覆写。zip 内是单文件 exe 加本说明，`publish.ps1` 会自动找 `dotnet`（PATH 里没有时回退到 `C:\Program Files\dotnet`）。
 
 - 解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次，再到设置里重新勾选开机自启 —— 自启项记录的是 exe 绝对路径，移动目录会让它失效。
 - 覆盖更新前先从托盘「退出」，否则 exe 被占用会替换失败。
 - 目标机没装 .NET 10 Desktop Runtime 时，先装运行时，或改用 190 MB 的自包含单文件版。
-- 安装包默认装到固定路径 `%LOCALAPPDATA%\QuickTranslate`，因此没有「移动目录导致自启失效」的问题；但**它不写任何自启项**，需要自启仍要在设置页勾选一次。安装前若程序正在运行，安装向导会提示先退出，避免 exe 被占用导致替换失败。
+- 安装包默认装到固定路径 `C:\Program Files\QuickTranslate`，因此没有「移动目录导致自启失效」的问题；安装和卸载都需要 UAC 管理员授权，卸载项写在 HKLM。但**它不写任何自启项**，需要自启仍要在设置页勾选一次（写的是当前用户的 HKCU Run，指向 Program Files 下固定的 exe）。安装前若程序正在运行，安装向导会提示先退出，避免 exe 被占用导致替换失败。
 - 两种形态都没有代码签名，首次运行都可能被 SmartScreen 提示；根治只能买证书做签名，自用项目未做。
 
 ## 被 Windows Defender / SmartScreen 拦截
@@ -154,7 +154,7 @@ powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\
 - **OCR 依赖系统语言包**：没装对应语言包会提示去系统设置添加。识别超大图片前会按 `OcrEngine.MaxImageDimension` 自动缩放。
 - **开机自启默认关闭**：可在设置页勾选，实现方式是 HKCU 的 Run 项，详见上文。不写计划任务、不需要管理员权限；启动阶段不写注册表，避免触发杀软的行为检测。
 - **未做代码签名**：exe 可能被 Defender / SmartScreen 拦截，首次运行的处置见上文「被 Windows Defender / SmartScreen 拦截」。
-- 程序以 `asInvoker` 权限运行，不请求管理员权限。
+- 程序以 `asInvoker` 权限运行，不请求管理员权限；只有**安装/卸载过程**需要 UAC 提权（v1.0.1 起安装包为系统级）。
 
 ## 目录结构
 
@@ -164,9 +164,9 @@ QuickTranslate/
 ├── README.md
 ├── .gitignore
 ├── publish.ps1                  便携版 zip 发布脚本
-├── build-installer.ps1           Inno Setup 安装包生成脚本
+├── build-installer.ps1           系统级 Inno Setup 安装包生成脚本
 ├── packaging/
-│   ├── setup.iss                 安装定义（无自启项，中文向导）
+│   ├── setup.iss                 系统级安装定义（无自启项，中文向导）
 │   └── ChineseSimplified.isl     Inno Setup 官方简体中文语言包
 ├── artifacts/                   构建产物（gitignore，不进仓库）
 └── src/QuickTranslate/

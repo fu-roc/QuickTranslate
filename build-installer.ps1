@@ -4,8 +4,9 @@
 
 .DESCRIPTION
     Takes the single-file exe produced by publish.ps1 and wraps it in a real
-    installer: wizard UI (Simplified Chinese), a fixed per-user install folder,
-    a start-menu shortcut and a proper Add/Remove Programs uninstall entry.
+    machine-wide installer: wizard UI (Simplified Chinese), Program Files as
+    the install folder, all-users shortcuts and an HKLM uninstall entry.
+    The generated Setup.exe requires elevation (UAC) to run.
     Requires Inno Setup 6.5+ (ISCC.exe), found via -ISCC, PATH, a normal install,
     or a portable copy under %LOCALAPPDATA%\Temp\QT-Packaging\IS.
 
@@ -15,13 +16,13 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
-    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.1
+    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.2
 #>
 [CmdletBinding()]
 param(
     [string] $Exe,
     [string] $ISCC,
-    [string] $Version = '1.0.0',
+    [string] $Version = '1.0.1',
     [string] $OutputDir
 )
 

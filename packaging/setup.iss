@@ -1,11 +1,17 @@
 ; QuickTranslate installer definition for Inno Setup 6.5+
 ; Build via build-installer.ps1 (passes /DQtExe, /DQtVersion, /DQtStamp, /O).
 ;
+; Machine-wide (system-level) install: requires elevation, installs to
+; Program Files, creates all-users shortcuts and an HKLM uninstall entry.
+;
 ; IMPORTANT: this installer deliberately does NOT create any autostart entry
 ; (no HKCU\...\Run value, no Startup-folder shortcut). An unsigned freshly
 ; built program writing a persistence entry triggers Windows Defender's
 ; Behavior:Win32/Persistence.A!ml heuristic, which quarantines the exe.
 ; Autostart is offered by the application's own Settings page instead.
+;
+; [Run] uses runasoriginaluser so the app does NOT inherit the installer's
+; elevated token: it must stay a normal asInvoker tray process.
 
 #ifndef QtExe
   #error QtExe must point at the published QuickTranslate.exe (use build-installer.ps1)
@@ -31,9 +37,11 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={localappdata}\QuickTranslate
+DefaultDirName={autopf}\QuickTranslate
 DefaultGroupName=QuickTranslate
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 OutputBaseFilename=QuickTranslate-{#QtVersion}-win-x64-setup-{#QtStamp}
 Compression=lzma2/max
@@ -57,8 +65,8 @@ Source: "{#QtExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Select text, press the hotkey, read the translation"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{commonprograms}\{#MyAppName}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Select text, press the hotkey, read the translation"
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,QuickTranslate}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,QuickTranslate}"; Flags: nowait postinstall skipifsilent runasoriginaluser
