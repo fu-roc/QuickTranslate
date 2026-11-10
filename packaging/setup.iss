@@ -17,7 +17,8 @@
   #error QtExe must point at the published QuickTranslate.exe (use build-installer.ps1)
 #endif
 #ifndef QtVersion
-  #define QtVersion "1.0.0"
+  ; 直接跑 ISCC 时的兜底版本；正常构建由 build-installer.ps1 从 csproj 传入
+  #define QtVersion "1.0.2"
 #endif
 #ifndef QtStamp
   #define QtStamp "dev"

@@ -1,24 +1,29 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace QuickTranslate.Services;
 
 public sealed class TrayService : IDisposable
 {
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
+
     private readonly NotifyIcon _icon;
+    private readonly ContextMenuStrip _menu;
 
     public TrayService(Action openSettings, Action exitApplication)
     {
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(new ToolStripMenuItem("设置", null, (_, _) => openSettings()));
-        menu.Items.Add(new ToolStripMenuItem("退出", null, (_, _) => exitApplication()));
+        _menu = new ContextMenuStrip();
+        _menu.Items.Add(new ToolStripMenuItem("设置", null, (_, _) => openSettings()));
+        _menu.Items.Add(new ToolStripMenuItem("退出", null, (_, _) => exitApplication()));
 
         _icon = new NotifyIcon
         {
             Icon = CreateIcon(),
             Text = "QuickTranslate",
             Visible = true,
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _menu,
         };
         _icon.DoubleClick += (_, _) => openSettings();
     }
@@ -36,12 +41,25 @@ public sealed class TrayService : IDisposable
             using var font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold, GraphicsUnit.Pixel);
             graphics.DrawString("T", font, Brushes.White, 2, 1);
         }
-        return Icon.FromHandle(bitmap.GetHicon());
+
+        // GetHicon 返回的是非托管句柄；Icon.FromHandle 并不接管它。
+        // 先克隆出托管 Icon 自己拥有的副本，再显式 DestroyIcon 释放原句柄。
+        IntPtr handle = bitmap.GetHicon();
+        try
+        {
+            return (Icon)Icon.FromHandle(handle).Clone();
+        }
+        finally
+        {
+            DestroyIcon(handle);
+        }
     }
 
     public void Dispose()
     {
         _icon.Visible = false;
+        _icon.Icon?.Dispose();
         _icon.Dispose();
+        _menu.Dispose();
     }
 }

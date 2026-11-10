@@ -49,10 +49,11 @@ public sealed class HotkeyService : IDisposable
     }
 
     /// <summary>
-    /// 一次性注册两个热键：任一失败就全部回滚，避免出现「旧键已注销、新键又没生效」的死状态。
+    /// 校验两个热键能否注册（占用检测必须真的调 RegisterHotKey），但不保留任何注册状态。
+    /// 设置窗口还开着，最终注册统一由 App.RegisterHotkeys 完成，避免「新键先生效、后续步骤失败」。
     /// 返回空字符串表示成功，否则是可直接展示的中文原因。
     /// </summary>
-    public string RegisterPair(int takeWordId, string takeWordHotkey, int ocrId, string ocrHotkey)
+    public string ValidatePair(int takeWordId, string takeWordHotkey, int ocrId, string ocrHotkey)
     {
         UnregisterAll();
         var errors = new List<string>();
@@ -62,10 +63,10 @@ public sealed class HotkeyService : IDisposable
         string second = Register(ocrId, ocrHotkey);
         if (!string.IsNullOrEmpty(second)) errors.Add($"截图 OCR：{second}");
 
-        if (errors.Count == 0) return string.Empty;
-
+        // 无论成功失败都不留注册：失败时旧键也已在设置窗口打开时注销，
+        // 关闭窗口后会由唯一的注册点按旧配置恢复，不会出现两个键全失灵的死状态。
         UnregisterAll();
-        return string.Join("；", errors);
+        return errors.Count == 0 ? string.Empty : string.Join("；", errors);
     }
 
     public void UnregisterAll()

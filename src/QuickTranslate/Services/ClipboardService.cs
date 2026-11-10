@@ -12,12 +12,12 @@ public static class ClipboardService
     /// 模拟 Ctrl+C 后读取剪贴板。按既定设计：不保存、不恢复剪贴板，
     /// 复制完成后剪贴板里留下的是选中的原文，用户原有剪贴板内容会被覆盖。
     /// </summary>
-    public static async Task<string?> CaptureSelectedTextAsync()
+    public static async Task<string?> CaptureSelectedTextAsync(CancellationToken cancellationToken = default)
     {
         // 全局热键触发的瞬间，Alt/Ctrl/Win 和主键通常还被物理按住。
         // 此时直接注入 Ctrl+C 会变成 Alt+Ctrl+C，目标应用不会执行复制；
         // 而且 Alt 会让部分应用进入菜单模式、丢掉文本选区。必须先等按键全部松开。
-        await WaitForKeysReleasedAsync();
+        await WaitForKeysReleasedAsync(cancellationToken);
 
         uint beforeSequence = NativeMethods.ClipboardSequenceNumber;
         string beforeText = SafeGetText();
@@ -27,7 +27,7 @@ public static class ClipboardService
         // 等目标应用把选区写入剪贴板，最多约 600ms
         for (int i = 0; i < 15; i++)
         {
-            await Task.Delay(40);
+            await Task.Delay(40, cancellationToken);
             if (NativeMethods.ClipboardSequenceNumber != beforeSequence) break;
         }
 
@@ -39,22 +39,25 @@ public static class ClipboardService
         return afterText;
     }
 
-    private static async Task WaitForKeysReleasedAsync()
+    private static async Task WaitForKeysReleasedAsync(CancellationToken cancellationToken)
     {
         const int maxWaitMs = 300;
         var stopwatch = Stopwatch.StartNew();
-        while (stopwatch.ElapsedMilliseconds < maxWaitMs && NativeMethods.AreHotkeyKeysPressed())
+        bool stillPressed;
+        do
         {
-            await Task.Delay(15);
+            stillPressed = NativeMethods.AreHotkeyKeysPressed();
+            if (!stillPressed) break;
+            await Task.Delay(15, cancellationToken);
         }
+        while (stopwatch.ElapsedMilliseconds < maxWaitMs);
 
-        // 热键组合的按键消息会被系统拦截，Alt/Ctrl 的 keyup 未必同步到目标应用的键盘状态；
-        // 无论是否超时都补发一次修饰键释放，确保注入的是纯 Ctrl+C 而不是 Alt+Ctrl+C。
-        // 对已经松开的键补发 keyup 是安全的（系统状态已是 up，会被忽略）。
-        NativeMethods.ReleaseModifierKeys();
+        // 只有超时（确实还有键被按住）才补发修饰键 keyup。
+        // 正常情况下无条件补发 5 个 keyup 会清掉用户随后正按住的 Ctrl/Shift/Alt。
+        if (stillPressed) NativeMethods.ReleaseModifierKeys();
 
         // 给前台应用一点时间处理 keyup
-        await Task.Delay(45);
+        await Task.Delay(45, cancellationToken);
     }
 
     private static string SafeGetText()
@@ -69,27 +72,37 @@ public static class ClipboardService
             {
                 Thread.Sleep(20);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogService.Warn("读取剪贴板失败", ex);
                 return string.Empty;
             }
         }
+        LogService.Warn("读取剪贴板失败：重试 5 次仍被占用");
         return string.Empty;
     }
 
-    public static void Copy(string text)
+    /// <summary>返回是否真的写进剪贴板，UI 不能无条件显示「已复制译文」。</summary>
+    public static bool Copy(string text)
     {
         for (int i = 0; i < 5; i++)
         {
             try
             {
                 Clipboard.SetText(text);
-                return;
+                return true;
             }
             catch (COMException)
             {
                 Thread.Sleep(20);
             }
+            catch (Exception ex)
+            {
+                LogService.Warn("复制译文到剪贴板失败", ex);
+                return false;
+            }
         }
+        LogService.Warn("复制译文到剪贴板失败：重试 5 次仍被占用");
+        return false;
     }
 }

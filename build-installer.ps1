@@ -22,7 +22,8 @@
 param(
     [string] $Exe,
     [string] $ISCC,
-    [string] $Version = '1.0.1',
+    # 留空时从 csproj 的 <Version> 读取，避免程序集版本与安装包版本各说各话
+    [string] $Version = '',
     [string] $OutputDir
 )
 
@@ -30,6 +31,15 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $artifacts = Join-Path $root 'artifacts'
+
+if (-not $Version) {
+    $csproj = Join-Path $root 'src\QuickTranslate\QuickTranslate.csproj'
+    $versionMatch = Select-String -LiteralPath $csproj -Pattern '<Version>([^<]+)</Version>' |
+        Select-Object -First 1
+    if ($versionMatch) { $Version = $versionMatch.Matches[0].Groups[1].Value }
+    else { $Version = '1.0.2' }
+    Write-Host "Version : $Version (from csproj)"
+}
 if (-not $OutputDir) { $OutputDir = $artifacts }
 if (-not (Test-Path -LiteralPath $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null

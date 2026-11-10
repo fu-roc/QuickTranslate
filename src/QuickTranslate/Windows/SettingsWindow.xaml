@@ -98,10 +98,15 @@
                    MinHeight="18"
                    Margin="0,10,0,0"
                    TextWrapping="Wrap" />
-        <TextBlock Text="配置保存在 %APPDATA%\QuickTranslate\config.json，请勿把填写后的文件公开。"
+        <TextBlock Text="配置保存在 %APPDATA%\QuickTranslate\config.json（密钥已用当前 Windows 账户加密），请勿把该文件公开或复制到别的账户。"
                    FontSize="11"
                    Foreground="#9AA0A6"
                    Margin="0,8,0,0"
+                   TextWrapping="Wrap" />
+        <TextBlock x:Name="VersionText"
+                   FontSize="11"
+                   Foreground="#9AA0A6"
+                   Margin="0,4,0,0"
                    TextWrapping="Wrap" />
     </StackPanel>
 </Window>

@@ -1,6 +1,7 @@
 using System.Windows;
 using QuickTranslate.Models;
 using QuickTranslate.Native;
+using QuickTranslate.Services;
 using WpfKey = System.Windows.Input.Key;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
@@ -36,6 +37,14 @@ public partial class SettingsWindow : Window
         LanguageBox.SelectedValue = config.TargetLanguage;
         // 以注册表真实状态为准，而不是缓存的勾选值：用户在任务管理器里禁用后这里会如实反映
         AutoStartBox.IsChecked = AutoStart.IsEnabled();
+
+        VersionText.Text = $"版本 {AppVersion.Display} · 日志：%LOCALAPPDATA%\\QuickTranslate\\app.log";
+
+        // 手改过 config.json 时目标语言可能不在下拉列表里，别静默回退成 zh
+        if (LanguageBox.SelectedItem is null)
+        {
+            SetStatus($"配置里的目标语言「{config.TargetLanguage}」不在列表中，保存时会回到「简体中文」。", isError: true);
+        }
     }
 
     private void Record_OnClick(object sender, RoutedEventArgs e)

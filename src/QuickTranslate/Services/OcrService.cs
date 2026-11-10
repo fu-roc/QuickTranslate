@@ -1,19 +1,26 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.IO;
 using System.Drawing.Imaging;
+using System.IO;
 using Windows.Globalization;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
-using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace QuickTranslate.Services;
 
 public static class OcrService
 {
-    public static async Task<string> RecognizeAsync(Bitmap bitmap)
+    // 语言包在会话内是稳定的，没必要每次 OCR 都重新 TryCreateFromLanguage。
+    private static readonly Lazy<OcrEngine?> Engine = new(CreateEngine);
+
+    /// <summary>
+    /// 全程内存：GDI 位图 → PNG 字节 → InMemoryRandomAccessStream → WinRT BitmapDecoder。
+    /// 不再把屏幕截图写成 %TEMP% 下的 PNG —— 进程被杀 / Defender 隔离时那种文件会永久残留敏感画面。
+    /// </summary>
+    public static async Task<string> RecognizeAsync(Bitmap bitmap, CancellationToken cancellationToken = default)
     {
-        OcrEngine? engine = CreateEngine();
+        OcrEngine? engine = Engine.Value;
         if (engine is null)
         {
             throw new InvalidOperationException(
@@ -21,25 +28,39 @@ public static class OcrService
         }
 
         int maxDimension = (int)OcrEngine.MaxImageDimension;
-        using Bitmap scaled = ScaleToLimit(bitmap, maxDimension);
-
-        // WinRT 的 BitmapDecoder 从临时 PNG 读取，避开 Stream → IRandomAccessStream 的互操作陷阱
-        string tempPath = Path.Combine(Path.GetTempPath(), $"qt_ocr_{Guid.NewGuid():N}.png");
+        Bitmap? scaled = ScaleToLimit(bitmap, maxDimension);
+        Bitmap target = scaled ?? bitmap;
         try
         {
-            scaled.Save(tempPath, ImageFormat.Png);
-            var file = await StorageFile.GetFileFromPathAsync(tempPath);
-            using var stream = await file.OpenAsync(FileAccessMode.Read);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            byte[] png;
+            using (var memory = new MemoryStream())
+            {
+                target.Save(memory, ImageFormat.Png);
+                png = memory.ToArray();
+            }
+
+            using var stream = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(stream))
+            {
+                writer.WriteBytes(png);
+                await writer.StoreAsync();
+                // 不 DetachStream 的话 writer.Close() 会把 stream 一起关掉
+                writer.DetachStream();
+            }
+            stream.Seek(0);
+
             var decoder = await BitmapDecoder.CreateAsync(stream);
             using var softwareBitmap = await decoder.GetSoftwareBitmapAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             var result = await engine.RecognizeAsync(softwareBitmap);
+            cancellationToken.ThrowIfCancellationRequested();
             return result.Text?.Trim() ?? string.Empty;
         }
         finally
         {
-            try { File.Delete(tempPath); }
-            catch (IOException) { /* 临时文件清理失败不影响本次识别 */ }
-            catch (UnauthorizedAccessException) { /* 同上 */ }
+            scaled?.Dispose();
         }
     }
 
@@ -52,19 +73,20 @@ public static class OcrService
                 var engine = OcrEngine.TryCreateFromLanguage(new Language(tag));
                 if (engine is not null) return engine;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 该语言包不存在时继续尝试下一个候选
+                LogService.Warn($"OCR 语言包 {tag} 不可用", ex);
             }
         }
         return OcrEngine.TryCreateFromUserProfileLanguages();
     }
 
-    private static Bitmap ScaleToLimit(Bitmap source, int maxDimension)
+    /// <summary>返回 null 表示无需缩放，直接复用调用方的位图，避免无意义的一份拷贝。</summary>
+    private static Bitmap? ScaleToLimit(Bitmap source, int maxDimension)
     {
         if (maxDimension <= 0 || (source.Width <= maxDimension && source.Height <= maxDimension))
         {
-            return new Bitmap(source);
+            return null;
         }
 
         double ratio = Math.Min((double)maxDimension / source.Width, (double)maxDimension / source.Height);
