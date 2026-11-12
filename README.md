@@ -107,7 +107,7 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，25 MB，需 .NET 10 Desktop Runtime
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，190 MB，目标机零依赖
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1          # 安装包，取 artifacts 里最新的 exe
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.2
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.3
 ```
 
 生成安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`）：脚本会依次在 `-ISCC` 参数、PATH、常见安装目录、便携目录里查找。`packaging/setup.iss` 是安装定义（`PrivilegesRequired=admin`、`{autopf}`、`{commonprograms}` / `{commondesktop}`，安装完成后的启动项用 `runasoriginaluser` 以免程序继承管理员令牌），`packaging/ChineseSimplified.isl` 是官方仓库的简体中文语言包。注意 Inno Setup 的 `Setup.exe` 自身 manifest 仍是 `asInvoker`，提权靠内部 `runas` 重启，不能用 manifest 判断安装级别。
@@ -174,11 +174,13 @@ QuickTranslate/
 ├── packaging/
 │   ├── setup.iss                 系统级安装定义（无自启项，中文向导）
 │   └── ChineseSimplified.isl     Inno Setup 官方简体中文语言包
+├── design/tray-icon/             图标设计源：设计稿 + 16/20/24/32/48/256 分尺寸 PNG
 ├── artifacts/                   构建产物（gitignore，不进仓库）
 └── src/QuickTranslate/
     ├── App.xaml(.cs)              启动编排、全局异常钩子、链路调度与取消、配置应用
     ├── app.manifest               PerMonitorV2 高 DPI 声明
     ├── QuickTranslate.csproj      单一版本来源（Version / AssemblyVersion / Product）
+    ├── Assets/QuickTranslate.ico  应用与托盘图标（6 帧 32bpp ICO）
     ├── Models/AppConfig.cs        配置模型
     ├── Native/
     │   ├── NativeMethods.cs       RegisterHotKey、SendInput、DPI、光标坐标
@@ -201,6 +203,12 @@ QuickTranslate/
         ├── SelectionOverlayWindow.xaml  截图框选层
         └── SettingsWindow.xaml    5 项配置 + 开机自启 + 快捷键录制/恢复默认 + 版本号
 ```
+
+## 图标
+
+`src/QuickTranslate/Assets/QuickTranslate.ico` 是唯一的图标资源，一处替换、三处生效：exe / 窗口 / 快捷方式（`csproj` 的 `ApplicationIcon`）、托盘（编译为内嵌资源，运行时按 `SystemInformation.SmallIconSize` 从 ICO 中挑帧，单文件发布也不依赖外部文件）、安装包向导（`setup.iss` 的 `SetupIconFile`）。
+
+ICO 含 16 / 20 / 24 / 32 / 48 / 256 六帧 32bpp 带透明通道图像，深色与浅色托盘都清晰。设计源在 `design/tray-icon/`：`design-spec.png` 是设计规范（主色 `#2F6BED`、译文白 `#FFFFFF`、深托盘 `#1F2430`、浅托盘 `#EFF1F5`），`png/` 是分尺寸源图。改图标时请保持六帧齐全 —— 小尺寸帧有意省略卡片内文字线，不能拿 256px 帧直接缩放代替。
 
 ## 开源许可
 

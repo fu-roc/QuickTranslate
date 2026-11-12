@@ -18,7 +18,7 @@
 #endif
 #ifndef QtVersion
   ; 直接跑 ISCC 时的兜底版本；正常构建由 build-installer.ps1 从 csproj 传入
-  #define QtVersion "1.0.2"
+  #define QtVersion "1.0.3"
 #endif
 #ifndef QtStamp
   #define QtStamp "dev"
@@ -45,6 +45,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 OutputBaseFilename=QuickTranslate-{#QtVersion}-win-x64-setup-{#QtStamp}
+SetupIconFile=..\src\QuickTranslate\Assets\QuickTranslate.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

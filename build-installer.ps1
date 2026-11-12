@@ -16,7 +16,7 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
-    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.2
+    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.3
 #>
 [CmdletBinding()]
 param(
@@ -37,7 +37,7 @@ if (-not $Version) {
     $versionMatch = Select-String -LiteralPath $csproj -Pattern '<Version>([^<]+)</Version>' |
         Select-Object -First 1
     if ($versionMatch) { $Version = $versionMatch.Matches[0].Groups[1].Value }
-    else { $Version = '1.0.2' }
+    else { $Version = '1.0.3' }
     Write-Host "Version : $Version (from csproj)"
 }
 if (-not $OutputDir) { $OutputDir = $artifacts }

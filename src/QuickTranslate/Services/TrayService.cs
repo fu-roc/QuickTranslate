@@ -1,13 +1,12 @@
 using System.Drawing;
-using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace QuickTranslate.Services;
 
 public sealed class TrayService : IDisposable
 {
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(IntPtr hIcon);
+    private const string IconResourceName = "QuickTranslate.Assets.QuickTranslate.ico";
 
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
@@ -31,28 +30,16 @@ public sealed class TrayService : IDisposable
     public void Notify(string message) =>
         _icon.ShowBalloonTip(3000, "QuickTranslate", message, ToolTipIcon.Info);
 
+    /// <summary>
+    /// 从程序集内嵌的 ico 中挑与系统托盘尺寸最匹配的帧（16/20/24/32），
+    /// 避免把 256px 帧缩到托盘导致细节糊掉。内嵌资源在单文件发布下依然可用。
+    /// </summary>
     private static Icon CreateIcon()
     {
-        using var bitmap = new Bitmap(16, 16);
-        using (var graphics = Graphics.FromImage(bitmap))
-        {
-            graphics.Clear(Color.Transparent);
-            graphics.FillEllipse(Brushes.RoyalBlue, 0, 0, 16, 16);
-            using var font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold, GraphicsUnit.Pixel);
-            graphics.DrawString("T", font, Brushes.White, 2, 1);
-        }
-
-        // GetHicon 返回的是非托管句柄；Icon.FromHandle 并不接管它。
-        // 先克隆出托管 Icon 自己拥有的副本，再显式 DestroyIcon 释放原句柄。
-        IntPtr handle = bitmap.GetHicon();
-        try
-        {
-            return (Icon)Icon.FromHandle(handle).Clone();
-        }
-        finally
-        {
-            DestroyIcon(handle);
-        }
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(IconResourceName)
+            ?? throw new InvalidOperationException($"缺少托盘图标资源：{IconResourceName}");
+        using var full = new Icon(stream);
+        return new Icon(full, SystemInformation.SmallIconSize);
     }
 
     public void Dispose()
