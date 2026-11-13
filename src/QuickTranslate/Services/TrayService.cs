@@ -11,10 +11,12 @@ public sealed class TrayService : IDisposable
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
 
-    public TrayService(Action openSettings, Action exitApplication)
+    public TrayService(Action openSettings, Action checkForUpdates, Action exitApplication)
     {
         _menu = new ContextMenuStrip();
         _menu.Items.Add(new ToolStripMenuItem("设置", null, (_, _) => openSettings()));
+        _menu.Items.Add(new ToolStripMenuItem("检查更新", null, (_, _) => checkForUpdates()));
+        _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(new ToolStripMenuItem("退出", null, (_, _) => exitApplication()));
 
         _icon = new NotifyIcon

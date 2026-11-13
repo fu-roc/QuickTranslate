@@ -9,7 +9,7 @@
 | `Alt+T`（可改） | 全局热键 → 模拟 `Ctrl+C` → 读剪贴板 → 百度翻译 → 光标旁悬浮窗显示译文 |
 | `Alt+S`（可改） | 全局热键 → 屏幕框选 → `Windows.Media.Ocr` 本地识别 → 百度翻译 → 同一个悬浮窗显示译文 |
 
-两条链路共用一个悬浮窗，**不抢走你正在打字的焦点**：点一下窗口后按 `Esc` / 鼠标移开 / 12 秒超时 / 再按一次快捷键关闭，点击译文即复制（复制失败会明确提示并允许重试）。关掉窗口会取消在途的翻译请求，迟到的结果不会再把窗口弹回来。失败时窗内显示中文原因，并按错误类别给出「打开设置」「重试」或「改用另一条链路」，不会把英文技术异常塞给你，也不会静默无反应。
+两条链路共用一个悬浮窗，**不抢走你正在打字的焦点**：**点击窗口外任意位置即关闭**，也支持鼠标移入后再移开（0.8 秒）/ 12 秒超时 / 再按一次快捷键 / 点一下窗口后按 `Esc`；点击译文即复制（复制失败会明确提示并允许重试）。关掉窗口会取消在途的翻译请求，迟到的结果不会再把窗口弹回来。失败时窗内显示中文原因，并按错误类别给出「打开设置」「重试」或「改用另一条链路」，不会把英文技术异常塞给你，也不会静默无反应。
 
 两个快捷键都可以自定义：托盘右键 → 设置 → 点对应行右侧的「录制」，直接按下想要的组合键即可录入（`Esc` 取消录制，`Backspace` 清空）；也可以像以前一样手动填写字符串。点「恢复默认快捷键」可一键回到 `Alt+T` / `Alt+S`。
 
@@ -36,7 +36,7 @@
 1. 打开 <https://fanyi-api.baidu.com/>，注册并完成个人认证，开通「通用文本翻译 API」，在开发者信息页拿到 APPID 和密钥。
 2. 从 Release 下载安装（或解压便携版），运行程序。首次启动会在 `%APPDATA%\QuickTranslate\config.json` 生成配置模板并自动打开设置窗口。
 3. 填入 APPID、密钥；快捷键可用「录制」按键录入或手动填写；选好目标语言、按需勾选「开机自动启动」后保存。
-4. 试着选中一段英文按 `Alt+T`。托盘图标右键可随时打开设置或退出。
+4. 试着选中一段英文按 `Alt+T`。托盘图标右键可随时打开设置、检查更新或退出。
 
 配置文件示例（**不要把填好密钥的文件提交到任何仓库**）：
 
@@ -77,6 +77,18 @@
 
 > **注意**：自启指向的是你当前运行的那个 exe。开发时从 `bin/Debug/.../QuickTranslate.exe` 启动，开机自启就指向该文件；清理构建目录会让它失效。要长期稳定使用，建议先 `dotnet publish` 到固定目录，从那里运行一次，再到设置里点一次「保存」（勾选状态不必改动）即可修正路径。
 
+## 检查更新（手动）
+
+托盘右键 → **检查更新**，或设置页底部版本号右侧的「检查更新」按钮，会查询本仓库 GitHub 上的最新 Release 并与当前程序版本比较。
+
+- **只在点击时联网**：启动阶段不发任何更新请求、不后台轮询、不写计划任务，也不上传任何本机信息。唯一对外请求是 `GET https://api.github.com/repos/fu-roc/QuickTranslate/releases/latest`（带 `User-Agent`，GitHub API 强制要求）。
+- **结果窗四种状态**：正在检查 / 已是最新 / 发现新版本（显示版本号、发布说明摘要、安装包文件名）/ 失败（中文原因 + 重试）。关掉窗口会取消在途请求，`Esc` 也能关闭。
+- **不自动下载、不自动运行**：只给「打开下载页面」按钮，用默认浏览器打开该版本的 Release 页（`html_url`）；目标 URL 限定为 `https://github.com`，避免把接口返回的任意字符串交给系统 Shell。下载与覆盖安装仍由你决定。
+- **失败不裸奔**：网络不通、12 秒超时、GitHub 限流（未登录接口每小时 60 次）、远端是草稿/预发布、版本号无法识别、JSON 解析失败，都给出可直接看懂的中文原因；底层异常只写日志。失败时也可以点「手动打开发布页面」。
+- **版本比较**：`tag_name` 去掉 `v` 前缀与 `-beta` / `+commit` 后缀后按四段 `Version` 比较；本地版本取自 `QuickTranslate.csproj` 的 `<Version>`，与安装包版本同源。
+
+> 更新检查依赖能访问 `api.github.com`。公司网络或代理拦截该域名时会显示「无法连接 GitHub」，此时可从 [Releases](https://github.com/fu-roc/QuickTranslate/releases) 直接下载。程序本身的取词、OCR、翻译、配置与自启**完全不依赖**这个接口。
+
 ## 构建与运行
 
 ```bash
@@ -107,7 +119,7 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，25 MB，需 .NET 10 Desktop Runtime
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，190 MB，目标机零依赖
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1          # 安装包，取 artifacts 里最新的 exe
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.3
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.0.4
 ```
 
 生成安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`）：脚本会依次在 `-ISCC` 参数、PATH、常见安装目录、便携目录里查找。`packaging/setup.iss` 是安装定义（`PrivilegesRequired=admin`、`{autopf}`、`{commonprograms}` / `{commondesktop}`，安装完成后的启动项用 `runasoriginaluser` 以免程序继承管理员令牌），`packaging/ChineseSimplified.isl` 是官方仓库的简体中文语言包。注意 Inno Setup 的 `Setup.exe` 自身 manifest 仍是 `asInvoker`，提权靠内部 `runas` 重启，不能用 manifest 判断安装级别。
@@ -154,7 +166,7 @@ powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\
 - **截图框选只覆盖光标所在的那一块屏幕**，不支持跨屏拖拽。选区用 Win32 物理像素坐标确定，因此截图内容不受多屏不同 DPI 缩放影响；但覆盖层在副屏的视觉定位可能有偏移。
 - **翻译必须联网**：走百度通用文本翻译 API，断网会明确报错。免费额度与接口规则由百度决定，可能变动。
 - **OCR 依赖系统语言包**：没装对应语言包会提示去系统设置添加。识别超大图片前会按 `OcrEngine.MaxImageDimension` 自动缩放；截图只在内存里流转（`InMemoryRandomAccessStream`），不再往 `%TEMP%` 写 PNG，进程被杀也不会残留屏幕内容。
-- **悬浮窗不抢焦点**：`ShowActivated=False`，不调用 `Activate()`；因此 `Esc` 需要先点一下窗口让它获得焦点，平时靠鼠标移开 / 12 秒超时 / 再按一次快捷键关闭。这是「不打断打字」与「全局 Esc」之间的取舍。
+- **悬浮窗不抢焦点**：`ShowActivated=False`，不调用 `Activate()`。窗口从不激活 → `Deactivated` 不会触发，窗口外的点击也收不到 WPF 鼠标事件，所以用**仅在显示期间运行的 60ms 轮询**（读全局左键状态 + 判断光标是否落在窗口内）实现「点击别处关闭」：不装任何全局钩子，也不吞掉那次点击。只有观察到完整的「按下 → 抬起」周期才判定，刚拖完选区就按热键时不会被自己松开的那一下关掉。鼠标从未进入窗口时不会自动消失（结果窗本来就在光标右下 16px），只有移入后再移开才 0.8 秒收起；另有 12 秒超时兜底。`Esc` 仍需先点一下窗口让它获得焦点 —— 这是「不打断打字」与「全局 Esc」之间的取舍。
 - **长文本按字节分段**：百度单次 `q` 上限是 **6000 字节**（汉字约 2000 个），程序按 UTF-8 字节切段并合并译文，最多 8 段；超长会明确提示，不再静默截断前 2000 字符。
 - **密钥与日志**：密钥用 DPAPI 加密，配置损坏时会先备份 `config.json.bak` 再提示；运行日志在 `%LOCALAPPDATA%\QuickTranslate\app.log`（超过 1 MB 轮转成 `.old`），只记异常与关键状态，不记 APPID / 密钥 / 翻译原文。Release 产物保留 portable PDB，符号文件单独放在 `artifacts/` 不塞进便携 zip。
 - **开机自启默认关闭**：可在设置页勾选，实现方式是 HKCU 的 Run 项，详见上文。不写计划任务、不需要管理员权限；启动阶段不写注册表，避免触发杀软的行为检测。
@@ -197,11 +209,13 @@ QuickTranslate/
     │   ├── ScreenCaptureService.cs 物理像素截图（裁剪到虚拟桌面）
     │   ├── OcrService.cs          全内存 Windows.Media.Ocr 识别
     │   ├── AutoStartService.cs    HKCU Run 开机自启（启动只读校验、仅显式保存时写入）
-    │   └── TrayService.cs         系统托盘
+    │   ├── UpdateService.cs       GitHub Release 版本检查（仅手动触发、失败中文化）
+    │   └── TrayService.cs         系统托盘（设置 / 检查更新 / 退出）
     └── Windows/
-        ├── ResultWindow.xaml      光标旁悬浮结果窗（不抢焦点）
+        ├── ResultWindow.xaml      光标旁悬浮结果窗（不抢焦点、点击外部关闭）
         ├── SelectionOverlayWindow.xaml  截图框选层
-        └── SettingsWindow.xaml    5 项配置 + 开机自启 + 快捷键录制/恢复默认 + 版本号
+        ├── SettingsWindow.xaml    5 项配置 + 开机自启 + 快捷键录制/恢复默认 + 版本号 + 检查更新按钮
+        └── UpdateWindow.xaml      检查更新结果窗（四种状态、打开下载页 / 重试）
 ```
 
 ## 图标

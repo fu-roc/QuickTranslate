@@ -23,6 +23,9 @@ public partial class SettingsWindow : Window
     /// </summary>
     public Func<AppConfig, bool, string?>? ApplyConfig { get; set; }
 
+    /// <summary>由 App 注入：打开「检查更新」窗口。</summary>
+    public Action? CheckForUpdates { get; set; }
+
     private WpfTextBox? _captureBox;
     private WpfButton? _captureButton;
     private string _captureOriginal = string.Empty;
@@ -211,6 +214,8 @@ public partial class SettingsWindow : Window
     }
 
     private void Cancel_OnClick(object sender, RoutedEventArgs e) => Close();
+
+    private void CheckUpdate_OnClick(object sender, RoutedEventArgs e) => CheckForUpdates?.Invoke();
 
     private void SetStatus(string message, bool isError)
     {

@@ -103,10 +103,26 @@
                    Foreground="#9AA0A6"
                    Margin="0,8,0,0"
                    TextWrapping="Wrap" />
-        <TextBlock x:Name="VersionText"
-                   FontSize="11"
-                   Foreground="#9AA0A6"
-                   Margin="0,4,0,0"
-                   TextWrapping="Wrap" />
+        <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="VersionText"
+                       Grid.Column="0"
+                       FontSize="11"
+                       Foreground="#9AA0A6"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap" />
+            <Button x:Name="CheckUpdateButton"
+                    Grid.Column="1"
+                    Content="检查更新"
+                    Width="82"
+                    Margin="8,0,0,0"
+                    Padding="5,2"
+                    FontSize="11"
+                    VerticalAlignment="Center"
+                    Click="CheckUpdate_OnClick" />
+        </Grid>
     </StackPanel>
 </Window>

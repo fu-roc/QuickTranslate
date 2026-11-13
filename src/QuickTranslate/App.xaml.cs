@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     private HotkeyService _hotkeys = null!;
     private TrayService _tray = null!;
     private ResultWindow _result = null!;
+    private UpdateWindow? _updateWindow;
     private BaiduTranslator _translator = null!;
     private bool _busy;
     private CancellationTokenSource? _chainCts;
@@ -48,7 +49,7 @@ public partial class App : System.Windows.Application
         _result.Hidden += CancelCurrentChain;
         _hotkeys = new HotkeyService();
         _hotkeys.HotkeyPressed += OnHotkeyPressed;
-        _tray = new TrayService(OpenSettings, ExitApplication);
+        _tray = new TrayService(OpenSettings, ShowUpdateWindow, ExitApplication);
 
         RegisterHotkeys();
         CheckAutoStart();
@@ -255,6 +256,7 @@ public partial class App : System.Windows.Application
         _hotkeys.UnregisterAll();
 
         var window = new SettingsWindow(_config) { ApplyConfig = ApplyConfig };
+        window.CheckForUpdates = ShowUpdateWindow;
         window.ShowDialog();
 
         // 无论保存成功、失败还是取消，都由唯一的注册点按当前生效的 _config 恢复
@@ -316,6 +318,30 @@ public partial class App : System.Windows.Application
         else if (pathWasStale && autoStart) notices.Add("开机自启路径已更新");
         if (notices.Count > 0) _tray.Notify(string.Join("；", notices));
         return null;
+    }
+
+    /// <summary>
+    /// 托盘菜单与设置页共用的唯一入口。窗口是用户主动点开的，所以会正常激活；
+    /// 重复点击时只激活已有窗口，不叠加多个检查请求。
+    /// </summary>
+    private void ShowUpdateWindow()
+    {
+        if (_updateWindow is { IsVisible: true })
+        {
+            try { _updateWindow.Activate(); }
+            catch (Exception ex) { LogService.Warn("激活更新窗口失败", ex); }
+            return;
+        }
+
+        var window = new UpdateWindow();
+        _updateWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_updateWindow, window)) _updateWindow = null;
+        };
+        window.Show();
+        try { window.Activate(); }
+        catch (Exception ex) { LogService.Warn("激活更新窗口失败", ex); }
     }
 
     private void ExitApplication()

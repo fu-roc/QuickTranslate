@@ -18,7 +18,7 @@
 #endif
 #ifndef QtVersion
   ; 直接跑 ISCC 时的兜底版本；正常构建由 build-installer.ps1 从 csproj 传入
-  #define QtVersion "1.0.3"
+  #define QtVersion "1.0.4"
 #endif
 #ifndef QtStamp
   #define QtStamp "dev"

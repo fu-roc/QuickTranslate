@@ -9,6 +9,7 @@ internal static class NativeMethods
 
     private const ushort VkControl = 0x11;
     private const ushort VkC = 0x43;
+    private const int VkLButton = 0x01;
     private const uint KeyeventfKeyup = 0x0002;
     private const uint InputKeyboard = 1;
     private const uint MonitorDefaultToNearest = 2;
@@ -101,6 +102,9 @@ internal static class NativeMethods
         GetCursorPosNative(out var point);
         return new Point(point.X, point.Y);
     }
+
+    /// <summary>全局物理左键状态。结果窗不激活，收不到窗口外点击的 WPF 事件，只能靠它轮询。</summary>
+    public static bool IsLeftButtonDown() => (GetAsyncKeyStateNative(VkLButton) & 0x8000) != 0;
 
     /// <summary>返回光标所在显示器的 DPI 缩放比，用于把物理像素换算成 WPF 的 DIP。</summary>
     public static double GetMonitorScale(Point physicalPoint)
