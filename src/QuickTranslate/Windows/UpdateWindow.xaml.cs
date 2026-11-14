@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading;
 using System.Windows;
 using QuickTranslate.Services;
 using WpfKey = System.Windows.Input.Key;

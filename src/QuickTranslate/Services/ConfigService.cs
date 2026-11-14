@@ -147,6 +147,9 @@ public static class ConfigService
         TakeWordHotkey = Fallback(stored.TakeWordHotkey, "Alt+T"),
         OcrHotkey = Fallback(stored.OcrHotkey, "Alt+S"),
         TargetLanguage = Fallback(stored.TargetLanguage, "zh"),
+        MainWindowSourceLanguage = Fallback(stored.MainWindowSourceLanguage, "auto"),
+        // 空字符串是有效值（表示跟随全局目标语言），不能用 Fallback 吃掉
+        MainWindowTargetLanguage = stored.MainWindowTargetLanguage ?? string.Empty,
     };
 
     private static StoredConfig ToStored(AppConfig config) => new()
@@ -156,6 +159,8 @@ public static class ConfigService
         TakeWordHotkey = config.TakeWordHotkey,
         OcrHotkey = config.OcrHotkey,
         TargetLanguage = config.TargetLanguage,
+        MainWindowSourceLanguage = config.MainWindowSourceLanguage,
+        MainWindowTargetLanguage = config.MainWindowTargetLanguage,
     };
 
     private static string Encrypt(string plain)
@@ -206,4 +211,6 @@ internal sealed class StoredConfig
     public string? TakeWordHotkey { get; set; }
     public string? OcrHotkey { get; set; }
     public string? TargetLanguage { get; set; }
+    public string? MainWindowSourceLanguage { get; set; }
+    public string? MainWindowTargetLanguage { get; set; }
 }

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using QuickTranslate.Models;
@@ -21,6 +20,7 @@ public partial class App : System.Windows.Application
     private HotkeyService _hotkeys = null!;
     private TrayService _tray = null!;
     private ResultWindow _result = null!;
+    private MainWindow? _mainWindow;
     private UpdateWindow? _updateWindow;
     private BaiduTranslator _translator = null!;
     private bool _busy;
@@ -49,7 +49,7 @@ public partial class App : System.Windows.Application
         _result.Hidden += CancelCurrentChain;
         _hotkeys = new HotkeyService();
         _hotkeys.HotkeyPressed += OnHotkeyPressed;
-        _tray = new TrayService(OpenSettings, ShowUpdateWindow, ExitApplication);
+        _tray = new TrayService(ShowMainWindow, OpenSettings, ShowUpdateWindow, ExitApplication);
 
         RegisterHotkeys();
         CheckAutoStart();
@@ -180,7 +180,7 @@ public partial class App : System.Windows.Application
         if (selected is null)
         {
             _result.ShowError(
-                "未检测到选中文本：请确认已选中文字，并完全松开快捷键后再试；管理员权限窗口、终端或禁止复制的软件可能无法读取。下方按钮是手动切换，不会自动开始截图。",
+                "未检测到选中文本：请确认已选中文字后重试；管理员权限窗口、终端或禁止复制的软件可能无法读取。下方按钮是手动切换，不会自动开始截图。",
                 "改用截图 OCR", () => RunChainLater(OcrHotkeyId));
             return;
         }
@@ -247,6 +247,57 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// 托盘左键单击 / 双击 / 右键「打开主界面」共用的唯一入口。窗口只隐藏不销毁，
+    /// 重复点击时复用同一个实例并激活，避免出现多个主窗口。
+    /// </summary>
+    private void ShowMainWindow()
+    {
+        if (_mainWindow is not null)
+        {
+            if (!_mainWindow.IsVisible) _mainWindow.Show();
+            try { _mainWindow.Activate(); }
+            catch (Exception ex) { LogService.Warn("激活主界面失败", ex); }
+            return;
+        }
+
+        var window = new MainWindow(_config)
+        {
+            // lambda 捕获 this，每次调用都读当前 _translator；设置页保存后自动跟随新配置
+            TranslateAsync = async (text, from, to, token) =>
+                await _translator.TranslateAsync(text, from, to, token),
+            SaveLanguage = SaveMainWindowLanguage,
+            OpenSettings = OpenSettings,
+        };
+        _mainWindow = window;
+        window.Show();
+        try { window.Activate(); }
+        catch (Exception ex) { LogService.Warn("激活主界面失败", ex); }
+    }
+
+    /// <summary>
+    /// 主界面的语种偏好单独落盘：只改 MainWindow* 两个字段，不动 TargetLanguage，
+    /// 所以划词 / 截图 OCR 恒用「自动检测 → 设置页目标语言」，完全不受影响。
+    /// 写盘失败不回滚内存里的选择，只提示本次选择重启后会恢复。
+    /// </summary>
+    private string? SaveMainWindowLanguage(string from, string to)
+    {
+        _config.MainWindowSourceLanguage = from;
+        _config.MainWindowTargetLanguage = to;
+        try
+        {
+            ConfigService.Save(_config);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or System.Security.SecurityException
+                                   or System.Security.Cryptography.CryptographicException)
+        {
+            LogService.Error("主界面语言偏好保存失败", ex);
+            return "语言偏好保存失败：无法写入配置文件，本次选择仍可用，重启后会恢复。详情见日志";
+        }
+    }
+
     private void OpenSettings()
     {
         _result.HideWindow();
@@ -269,6 +320,11 @@ public partial class App : System.Windows.Application
     /// </summary>
     private string? ApplyConfig(AppConfig config, bool autoStart)
     {
+        // 设置页会重建 AppConfig 对象，主界面语种偏好不在表单里，必须显式带过去，
+        // 否则用户点一次「保存」就会把主界面记住的语种重置掉。
+        config.MainWindowSourceLanguage = _config.MainWindowSourceLanguage;
+        config.MainWindowTargetLanguage = _config.MainWindowTargetLanguage;
+
         // 1) 无持久副作用的热键校验（校验完立即注销，不留下「新键已生效但配置没保存」的状态）
         string failure = _hotkeys.ValidatePair(
             TakeWordHotkeyId, config.TakeWordHotkey,
@@ -311,6 +367,7 @@ public partial class App : System.Windows.Application
 
         _config = config;
         _translator = new BaiduTranslator(config);
+        _mainWindow?.ApplyConfig(config);
 
         var notices = new List<string>();
         if (hotkeysChanged) notices.Add($"快捷键已更新：{config.TakeWordHotkey} 取词 / {config.OcrHotkey} 截图");
@@ -348,6 +405,8 @@ public partial class App : System.Windows.Application
     {
         CancelCurrentChain();
         _result.ForceClose();
+        // 主窗口的 Closing 默认会 Cancel 并隐藏，退出时必须先放行，否则 Shutdown 会被挡住
+        _mainWindow?.ForceClose();
         Shutdown();
     }
 

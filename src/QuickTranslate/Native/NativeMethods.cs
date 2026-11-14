@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Runtime.InteropServices;
 
 namespace QuickTranslate.Native;
@@ -114,24 +113,6 @@ internal static class NativeMethods
         if (monitor == IntPtr.Zero) return 1.0;
         if (GetDpiForMonitorNative(monitor, 0, out uint dpiX, out _) != 0) return 1.0;
         return dpiX == 0 ? 1.0 : dpiX / 96.0;
-    }
-
-    /// <summary>
-    /// 检测热键的修饰键 / 主键是否仍被物理按住。
-    /// 覆盖 0x08-0x87（修饰键、字母数字、导航键、F1-F24）与左右专用修饰键 0xA0-0xA5；
-    /// 不含鼠标键（0x01-0x07），用户刚拖完选区按着鼠标不会导致一直等待。
-    /// </summary>
-    public static bool AreHotkeyKeysPressed()
-    {
-        for (int vk = 0x08; vk <= 0x87; vk++)
-        {
-            if ((GetAsyncKeyStateNative(vk) & 0x8000) != 0) return true;
-        }
-        for (int vk = 0xA0; vk <= 0xA5; vk++)
-        {
-            if ((GetAsyncKeyStateNative(vk) & 0x8000) != 0) return true;
-        }
-        return false;
     }
 
     /// <summary>长按热键不放时的兜底：主动清除系统里残留的修饰键按下状态。</summary>

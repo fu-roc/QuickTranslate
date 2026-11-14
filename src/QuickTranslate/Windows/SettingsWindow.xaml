@@ -54,7 +54,7 @@
                      Padding="5"
                      VerticalContentAlignment="Center"
                      ToolTip="例如 Alt+S；点右侧「录制」可直接按键录入" />
-            <Button x:Name="OcrRecordButton"
+            <Button
                     Grid.Column="1"
                     Content="录制"
                     Width="58"
@@ -63,8 +63,8 @@
                     Click="Record_OnClick" />
         </Grid>
 
-        <TextBlock Text="目标语言" FontSize="12" Foreground="#6B7280" />
-        <ComboBox x:Name="LanguageBox" SelectedValuePath="Tag" Margin="0,3,0,14" Padding="5">
+        <TextBlock Text="划词 / 截图 OCR 的目标语言" FontSize="12" Foreground="#6B7280" />
+        <ComboBox x:Name="LanguageBox" SelectedValuePath="Tag" Margin="0,3,0,4" Padding="5">
             <ComboBoxItem Tag="zh" Content="简体中文" />
             <ComboBoxItem Tag="cht" Content="繁体中文" />
             <ComboBoxItem Tag="en" Content="英语" />
@@ -75,12 +75,17 @@
             <ComboBoxItem Tag="spa" Content="西班牙语" />
             <ComboBoxItem Tag="ru" Content="俄语" />
         </ComboBox>
+        <TextBlock Text="主界面的源语言 / 译文语言在主窗口里单独设置，两边互不影响。"
+                   FontSize="11"
+                   Foreground="#9AA0A6"
+                   Margin="0,0,0,14"
+                   TextWrapping="Wrap" />
 
         <CheckBox x:Name="AutoStartBox"
                   Content="开机自动启动"
                   FontSize="13"
                   Margin="0,0,0,4" />
-        <TextBlock Text="登录 Windows 后自动在托盘运行，仅在你点「保存」且开关有变化时写入当前用户的「启动」项，无需管理员权限。若被 Windows 安全中心拦截，请先把程序所在目录加入防病毒排除项。也可在任务管理器的「启动应用」中禁用。"
+        <TextBlock Text="登录 Windows 后自动在托盘运行。每次点「保存」都会校验并按需更新当前用户的「启动」项（已是正确状态时不写，也可顺带修正程序搬家后的旧路径），无需管理员权限。若被 Windows 安全中心拦截，请先把程序所在目录加入防病毒排除项。也可在任务管理器的「启动应用」中禁用。"
                    FontSize="11"
                    Foreground="#6B7280"
                    Margin="20,0,0,14"
@@ -114,7 +119,7 @@
                        Foreground="#9AA0A6"
                        VerticalAlignment="Center"
                        TextWrapping="Wrap" />
-            <Button x:Name="CheckUpdateButton"
+            <Button
                     Grid.Column="1"
                     Content="检查更新"
                     Width="82"

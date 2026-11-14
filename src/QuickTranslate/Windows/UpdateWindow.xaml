@@ -61,7 +61,7 @@
                     Padding="6"
                     Visibility="Collapsed"
                     Click="Download_OnClick" />
-            <Button x:Name="CloseButton"
+            <Button
                     Content="关闭"
                     Width="72"
                     Padding="6"

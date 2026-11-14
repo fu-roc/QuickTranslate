@@ -15,9 +15,9 @@
     <AssemblyName>QuickTranslate</AssemblyName>
     <RootNamespace>QuickTranslate</RootNamespace>
     <!-- 单一版本来源：程序集、设置页、安装包都从这里读（build-installer.ps1 会解析 csproj） -->
-    <Version>1.0.4</Version>
-    <AssemblyVersion>1.0.4.0</AssemblyVersion>
-    <FileVersion>1.0.4.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <Product>QuickTranslate</Product>
     <Company>fu-roc</Company>
     <Description>极简 Windows 划词/截图 OCR 翻译工具</Description>

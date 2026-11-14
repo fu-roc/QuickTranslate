@@ -3,8 +3,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace QuickTranslate.Services;
 
@@ -153,7 +151,7 @@ public static class UpdateService
             CanOpenReleasePage: true);
     }
 
-    /// <summary>把 v1.0.4 / 1.0.4 / 1.0.4-beta.2 之类 tag 解析成版本；失败返回 false。</summary>
+    /// <summary>把 v1.1.0 / 1.1.0 / 1.1.0-beta.2 之类 tag 解析成版本；失败返回 false。</summary>
     public static bool TryParseTag(string? tag, out Version version)
     {
         version = new Version(0, 0, 0, 0);

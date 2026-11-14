@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows;
 using QuickTranslate.Native;
 using Clipboard = System.Windows.Clipboard;
 
@@ -14,50 +12,49 @@ public static class ClipboardService
     /// </summary>
     public static async Task<string?> CaptureSelectedTextAsync(CancellationToken cancellationToken = default)
     {
-        // 全局热键触发的瞬间，Alt/Ctrl/Win 和主键通常还被物理按住。
-        // 此时直接注入 Ctrl+C 会变成 Alt+Ctrl+C，目标应用不会执行复制；
-        // 而且 Alt 会让部分应用进入菜单模式、丢掉文本选区。必须先等按键全部松开。
-        await WaitForKeysReleasedAsync(cancellationToken);
-
-        uint beforeSequence = NativeMethods.ClipboardSequenceNumber;
-        string beforeText = SafeGetText();
-
-        if (!NativeMethods.SendCtrlC()) return null;
-
-        // 等目标应用把选区写入剪贴板，最多约 600ms
-        for (int i = 0; i < 15; i++)
+        // 绝不能等用户松开 Alt。浏览器在 Alt 的 keyup 后会把页面选区变成非活动状态
+        // （蓝色高亮变灰）、焦点落到菜单栏/工具栏，那时 Ctrl+C 已经复制不到页面选区了。
+        // 这就是「马上松 Alt 报未检测到选中文本，一直按住 Alt 反而正常」的原因：
+        // 长按时旧逻辑靠 300ms 超时补发 keyup 并在 Alt keyup 之前完成了复制。
+        // 现在把这个成功路径提前到热键到达的瞬间，手势不再影响结果。
+        for (int attempt = 0; attempt < 2; attempt++)
         {
-            await Task.Delay(40, cancellationToken);
-            if (NativeMethods.ClipboardSequenceNumber != beforeSequence) break;
+            // RegisterHotKey 截获了修饰键的 keydown，先补发 keyup 清掉系统里残留的
+            // Alt 按下状态，否则注入的 Ctrl+C 会变成 Alt+Ctrl+C。
+            NativeMethods.ReleaseModifierKeys();
+            // 只给系统分发 keyup 的极短时间，不等待任何用户手势；
+            // 首轮 keydown 若仍被前台窗口吞掉，第二轮补发一次即可恢复。
+            await Task.Delay(attempt == 0 ? 20 : 60, cancellationToken);
+
+            uint beforeSequence = NativeMethods.ClipboardSequenceNumber;
+            string beforeText = SafeGetText();
+            bool sent = NativeMethods.SendCtrlC();
+
+            if (sent)
+            {
+                // 等目标应用把选区写入剪贴板，单轮最多约 480ms
+                for (int i = 0; i < 12; i++)
+                {
+                    await Task.Delay(40, cancellationToken);
+                    if (NativeMethods.ClipboardSequenceNumber != beforeSequence) break;
+                }
+            }
+
+            string afterText = SafeGetText();
+            bool sequenceChanged = NativeMethods.ClipboardSequenceNumber != beforeSequence;
+
+            if (sent && !string.IsNullOrWhiteSpace(afterText) && (sequenceChanged || afterText != beforeText))
+            {
+                return afterText;
+            }
+
+            LogService.Info(
+                $"取词 #{attempt + 1} 未取到：sent={sent} seqChanged={sequenceChanged} " +
+                $"beforeLen={beforeText.Length} afterLen={afterText.Length}");
         }
 
-        string afterText = SafeGetText();
-        bool sequenceChanged = NativeMethods.ClipboardSequenceNumber != beforeSequence;
-
-        if (string.IsNullOrWhiteSpace(afterText)) return null;
-        if (!sequenceChanged && afterText == beforeText) return null;
-        return afterText;
-    }
-
-    private static async Task WaitForKeysReleasedAsync(CancellationToken cancellationToken)
-    {
-        const int maxWaitMs = 300;
-        var stopwatch = Stopwatch.StartNew();
-        bool stillPressed;
-        do
-        {
-            stillPressed = NativeMethods.AreHotkeyKeysPressed();
-            if (!stillPressed) break;
-            await Task.Delay(15, cancellationToken);
-        }
-        while (stopwatch.ElapsedMilliseconds < maxWaitMs);
-
-        // 只有超时（确实还有键被按住）才补发修饰键 keyup。
-        // 正常情况下无条件补发 5 个 keyup 会清掉用户随后正按住的 Ctrl/Shift/Alt。
-        if (stillPressed) NativeMethods.ReleaseModifierKeys();
-
-        // 给前台应用一点时间处理 keyup
-        await Task.Delay(45, cancellationToken);
+        LogService.Warn("取词失败：两轮 Ctrl+C 均未取到选中文本");
+        return null;
     }
 
     private static string SafeGetText()

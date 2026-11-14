@@ -21,7 +21,13 @@ public sealed class BaiduTranslator
 
     public BaiduTranslator(AppConfig config) => _config = config;
 
-    public async Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default)
+    /// <summary>划词 / 截图 OCR 走这里：恒为「自动检测 → 设置页的目标语言」，不受主界面语种影响。</summary>
+    public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default) =>
+        TranslateAsync(text, "auto", _config.TargetLanguage, cancellationToken);
+
+    /// <summary>主界面手动翻译走这里，源语言与目标语言由界面传入。</summary>
+    public async Task<string> TranslateAsync(
+        string text, string from, string to, CancellationToken cancellationToken = default)
     {
         if (!_config.IsConfigured)
         {
@@ -34,7 +40,11 @@ public sealed class BaiduTranslator
             throw new TranslationException("没有可翻译的文本。", TranslationErrorCategory.Service);
         }
 
-        List<string> chunks = SplitByUtf8Bytes(text);
+        // 下划线拼接 / 驼峰 / 全大写缩写这类程序标识符，百度会当成生造词（原样返回或漏翻）。
+        // 先还原成空格分隔的自然语言再发送；普通句子、中文、URL、代码行原样不动。
+        // 只改变发给 API 的 q，界面展示的原文仍是用户选中的字符串。
+        string queryText = IdentifierNormalizer.Normalize(text);
+        List<string> chunks = SplitByUtf8Bytes(queryText);
         if (chunks.Count > MaxChunks)
         {
             throw new TranslationException(
@@ -42,12 +52,15 @@ public sealed class BaiduTranslator
                 TranslationErrorCategory.Service);
         }
 
+        string source = string.IsNullOrWhiteSpace(from) ? "auto" : from;
+        string target = string.IsNullOrWhiteSpace(to) ? _config.TargetLanguage : to;
+
         var builder = new StringBuilder();
         foreach (string chunk in chunks)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (builder.Length > 0) builder.AppendLine();
-            builder.Append(await TranslateChunkAsync(chunk, cancellationToken));
+            builder.Append(await TranslateChunkAsync(chunk, source, target, cancellationToken));
         }
 
         string translated = builder.ToString().TrimEnd();
@@ -58,7 +71,8 @@ public sealed class BaiduTranslator
         return translated;
     }
 
-    private async Task<string> TranslateChunkAsync(string query, CancellationToken cancellationToken)
+    private async Task<string> TranslateChunkAsync(
+        string query, string from, string to, CancellationToken cancellationToken)
     {
         string salt = Random.Shared.NextInt64(100000, 999999999).ToString(CultureInfo.InvariantCulture);
         string sign = ComputeSign(query, salt);
@@ -66,8 +80,8 @@ public sealed class BaiduTranslator
         var form = new Dictionary<string, string>
         {
             ["q"] = query,
-            ["from"] = "auto",
-            ["to"] = _config.TargetLanguage,
+            ["from"] = from,
+            ["to"] = to,
             ["appid"] = _config.AppId,
             ["salt"] = salt,
             ["sign"] = sign,
