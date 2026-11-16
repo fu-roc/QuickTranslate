@@ -32,6 +32,17 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $artifacts = Join-Path $root 'artifacts'
 
+# ISCC resolves relative paths against packaging\ (where setup.iss lives), but -Exe and
+# -OutputDir arrive relative to the caller's working directory. Normalise them here so that
+# "-Exe .\artifacts\...\QuickTranslate.exe" does not become "packaging\.\artifacts\...".
+# GetFullPath already handles rooted paths, "." / "..", and mixed separators.
+function Resolve-UserPath([string] $path) {
+    if ([string]::IsNullOrWhiteSpace($path)) { return $path }
+    return [System.IO.Path]::GetFullPath($path)
+}
+if ($Exe) { $Exe = Resolve-UserPath $Exe }
+if ($OutputDir) { $OutputDir = Resolve-UserPath $OutputDir }
+
 if (-not $Version) {
     $csproj = Join-Path $root 'src\QuickTranslate\QuickTranslate.csproj'
     $versionMatch = Select-String -LiteralPath $csproj -Pattern '<Version>([^<]+)</Version>' |
