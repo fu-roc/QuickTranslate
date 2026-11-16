@@ -46,10 +46,9 @@ if (-not (Test-Path -LiteralPath $OutputDir)) {
 }
 
 if (-not $Exe) {
-    $found = Get-ChildItem -LiteralPath $artifacts -Recurse -Filter 'QuickTranslate.exe' -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $found) { throw "No published QuickTranslate.exe under $artifacts. Run publish.ps1 first." }
-    $Exe = $found.FullName
+    throw "Please pass -Exe with this run's publish output. " +
+          "Picking the newest exe under artifacts\ would silently package an older build. " +
+          "Example: .\build-installer.ps1 -Exe .\artifacts\QuickTranslate-<stamp>-win-x64-framework-dependent\QuickTranslate\QuickTranslate.exe"
 }
 if (-not (Test-Path -LiteralPath $Exe)) { throw "Source exe not found: $Exe" }
 

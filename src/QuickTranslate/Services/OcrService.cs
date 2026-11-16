@@ -22,7 +22,7 @@ public static class OcrService
         OcrEngine? engine = Engine.Value;
         if (engine is null)
         {
-            throw new InvalidOperationException(
+            throw new OcrException(
                 "系统缺少 OCR 语言包：请在「设置 → 时间和语言」中添加 English (United States) 或中文，并勾选文字识别可选功能。");
         }
 

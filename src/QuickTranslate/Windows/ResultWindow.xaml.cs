@@ -15,8 +15,6 @@ public partial class ResultWindow : Window
     private static readonly SolidColorBrush MutedBrush = new(Color.FromRgb(0x6B, 0x72, 0x80));
     private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(0xC0, 0x39, 0x2B));
 
-    private readonly DispatcherTimer _autoHideTimer = new() { Interval = TimeSpan.FromSeconds(12) };
-    private readonly DispatcherTimer _leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(800) };
     private readonly DispatcherTimer _presenceTimer = new(DispatcherPriority.Background)
     {
         Interval = TimeSpan.FromMilliseconds(60),
@@ -27,7 +25,6 @@ public partial class ResultWindow : Window
     private bool _forceClose;
     private bool _lButtonWasDown;
     private bool _clickArmed;
-    private bool _pointerEntered;
 
     /// <summary>窗口被隐藏时通知 App 取消在途的翻译/识别请求，避免迟到的结果把窗口弹回来。</summary>
     public event Action? Hidden;
@@ -37,10 +34,8 @@ public partial class ResultWindow : Window
         InitializeComponent();
 
         // 不抢前台焦点：ShowActivated=False + 不调用 Activate()。窗口从不激活，
-        // Deactivated 不会触发，窗口外的点击也收不到 WPF 鼠标事件；用显示期轮询统一处理
-        // 「点击别处关闭 / 鼠标进出 / 12 秒兜底」，不装任何全局钩子。
-        _autoHideTimer.Tick += (_, _) => HideWindow();
-        _leaveTimer.Tick += (_, _) => HideWindow();
+        // Deactivated 不会触发，窗口外的点击也收不到 WPF 鼠标事件；用显示期轮询实现
+        // 「点击别处关闭」，不装任何全局钩子。窗口不会自己消失，也不再随鼠标移开收起。
         _presenceTimer.Tick += OnPresenceTick;
 
         Closing += (_, e) =>
@@ -49,18 +44,12 @@ public partial class ResultWindow : Window
             e.Cancel = true;
             HideWindow();
         };
-        PreviewKeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Escape) HideWindow();
-        };
     }
 
     public bool IsShowing => IsVisible;
 
     public void HideWindow()
     {
-        _autoHideTimer.Stop();
-        _leaveTimer.Stop();
         _presenceTimer.Stop();
         if (!IsVisible) return;
         Hide();
@@ -69,8 +58,6 @@ public partial class ResultWindow : Window
 
     public void ForceClose()
     {
-        _autoHideTimer.Stop();
-        _leaveTimer.Stop();
         _presenceTimer.Stop();
         _forceClose = true;
         Close();
@@ -84,7 +71,7 @@ public partial class ResultWindow : Window
         ResultText.Foreground = MutedBrush;
         ResultBorder.Cursor = Cursors.Arrow;
         SetAction(null, null);
-        HintText.Text = "点击别处关闭 · 12 秒后收起";
+        HintText.Text = "点击别处关闭";
         _copyText = null;
         ShowNearCursor();
     }
@@ -97,7 +84,7 @@ public partial class ResultWindow : Window
         ResultText.Foreground = NormalBrush;
         ResultBorder.Cursor = Cursors.Hand;
         SetAction(null, null);
-        HintText.Text = "点击译文复制 · 点击别处关闭 · 12 秒后收起";
+        HintText.Text = "点击译文复制 · 点击别处关闭";
         _copyText = translated;
         ShowNearCursor();
     }
@@ -111,7 +98,7 @@ public partial class ResultWindow : Window
         ResultText.Foreground = ErrorBrush;
         ResultBorder.Cursor = Cursors.Arrow;
         SetAction(switchLabel, switchAction);
-        HintText.Text = "修好后重新按快捷键 · 点击别处关闭 · 12 秒后收起";
+        HintText.Text = "修好后重新按快捷键 · 点击别处关闭";
         _copyText = null;
         ShowNearCursor();
     }
@@ -123,19 +110,6 @@ public partial class ResultWindow : Window
         SwitchButton.Visibility = action is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void RestartAutoHide()
-    {
-        _leaveTimer.Stop();
-        _autoHideTimer.Stop();
-        _autoHideTimer.Start();
-    }
-
-    private void StartLeaveTimer()
-    {
-        _leaveTimer.Stop();
-        _leaveTimer.Start();
-    }
-
     /// <summary>
     /// 每次显示重置点击状态：显示瞬间左键若已按下（刚拖完选区），那次抬升不算新点击，
     /// 必须观察到完整的「按下 → 抬起」周期才判定，否则译文会被自己刚松开的那一下立刻关掉。
@@ -145,7 +119,6 @@ public partial class ResultWindow : Window
         _presenceTimer.Stop();
         _lButtonWasDown = NativeMethods.IsLeftButtonDown();
         _clickArmed = false;
-        _pointerEntered = IsCursorInsideWindow();
         _presenceTimer.Start();
     }
 
@@ -158,20 +131,9 @@ public partial class ResultWindow : Window
         }
 
         bool inside = IsCursorInsideWindow();
-        if (inside)
-        {
-            if (!_pointerEntered) RestartAutoHide();
-            _pointerEntered = true;
-            _leaveTimer.Stop();
-        }
-        else if (_pointerEntered)
-        {
-            // 结果窗出现在光标右下 16px，鼠标通常从未进入过窗口；
-            // 只有真正进来过再离开才自动收起，避免刚显示就消失。
-            _pointerEntered = false;
-            StartLeaveTimer();
-        }
 
+        // 唯一的关闭条件：完整的「按下 → 抬起」落在窗口外。
+        // 窗口不会自己消失，也不会因为鼠标移开就收起。
         bool down = NativeMethods.IsLeftButtonDown();
         if (!_lButtonWasDown && down) _clickArmed = true;
         if (_clickArmed && _lButtonWasDown && !down)
@@ -223,7 +185,6 @@ public partial class ResultWindow : Window
         Left = Math.Min(left, Math.Max(screen.Bounds.Left / scale + 12, maxLeft));
         Top = Math.Min(top, Math.Max(screen.Bounds.Top / scale + 12, maxTop));
 
-        RestartAutoHide();
         StartPresenceWatch();
     }
 
@@ -241,7 +202,6 @@ public partial class ResultWindow : Window
             // 保留 _copyText，用户可以再点一次重试，而不是被一句假「已复制」骗过去
             HintText.Text = "复制失败：剪贴板被其他程序占用，请再点一次译文重试";
         }
-        RestartAutoHide();
     }
 
     private void SwitchButton_OnClick(object sender, RoutedEventArgs e)

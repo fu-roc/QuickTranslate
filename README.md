@@ -112,7 +112,7 @@
 
 - 只支持 Windows；翻译需联网且需自备百度 API 密钥
 - 取词依赖模拟 `Ctrl+C`，不恢复原剪贴板内容；少数禁止复制的场景要用截图 OCR
-- 悬浮结果窗为了「不抢焦点」，需要光标移入后 `Esc` 才生效；点击窗口外、鼠标移开 0.8 秒、12 秒超时都能关闭它
+- 悬浮结果窗为了「不抢焦点」收不到键盘消息，因此不支持 `Esc` 关闭；点一下窗口外的任意位置，或再按一次同一个快捷键即可关闭它，窗口本身不会自动消失
 - 未做代码签名，首次运行可能被安全软件拦；日志按大小轮转，磁盘占用上限约 2 MB
 - 开机自启默认关闭；更新检查只在手动点击时联网，不自动下载、不自动安装
 
@@ -191,7 +191,7 @@
 - **不等用户松开热键**：浏览器在 `Alt` 的 keyup 后会激活菜单栏、把页面选区变成非活动状态（蓝色高亮变灰），那时 `Ctrl+C` 已经复制不到页面选区 —— 这正是「马上松 Alt 报未检测到选中文本、一直按住 Alt 反而正常」的原因。热键到达瞬间先补发修饰键 keyup 清掉残留 `Alt`（否则注入会变成 `Alt+Ctrl+C`），约 20ms 后立即注入 `Ctrl+C`，抢在焦点转移前完成复制。`RegisterHotKey` 会截获 keydown，前台窗口偶尔仍吞掉首次 `Ctrl/C` keydown，所以首轮剪贴板无变化时会清一次修饰键并补发第二次。
 - 取词失败在 `%LOCALAPPDATA%\QuickTranslate\app.log` 留一行诊断（注入是否成功、剪贴板序号是否变化、前后文本长度），**不记录原文**；日志按 1 MB 轮转成 `app.log.old`，磁盘上限约 2 MB。
 - **截图 OCR**：只覆盖光标所在那一块屏幕，不支持跨屏拖拽；选区用 Win32 物理像素坐标确定，不受多屏不同 DPI 缩放影响（覆盖层在副屏的视觉定位可能有偏移）。截图经 `InMemoryRandomAccessStream` 全内存流转，不往临时目录写 PNG；超大图片按 `OcrEngine.MaxImageDimension` 自动缩放。无对应系统语言包时会提示去系统设置添加。
-- **悬浮窗不抢焦点**：`ShowActivated=False`，不调用 `Activate()`。窗口从不激活 → `Deactivated` 不触发、窗口外点击也收不到 WPF 鼠标事件，所以用**仅在显示期间运行的 60ms 轮询**（读全局左键状态 + 判断光标是否落在窗口内）实现「点击别处关闭」：不装全局钩子、不吞掉那次点击，只有观察到完整「按下 → 抬起」周期才判定，刚拖完选区按热键不会被自己松开的那一下关掉。鼠标从未进入窗口时不会自动消失，移入后再移开 0.8 秒收起，另有 12 秒超时兜底。
+- **悬浮窗不抢焦点**：`ShowActivated=False`，不调用 `Activate()`。窗口从不激活 → `Deactivated` 不触发、窗口外点击也收不到 WPF 鼠标事件，所以用**仅在显示期间运行的 60ms 轮询**（读全局左键状态 + 判断光标是否落在窗口内）实现「点击别处关闭」：不装全局钩子、不吞掉那次点击，只有观察到完整「按下 → 抬起」周期才判定，刚拖完选区按热键不会被自己松开的那一下关掉。窗口不设任何超时，也不会因为鼠标移开而消失。窗口从不激活、收不到键盘消息，所以关闭方式只有两种：点窗口外，或再按一次热键。
 - **主界面相反**：它是你主动点开的常规窗口，需要打字、按 `Ctrl+Enter` 和 `Esc`，所以用 `Show()` + `Activate()`，不做「点击别处关闭」。两种窗口焦点策略不同是刻意设计；划词 / OCR 热键不依赖主界面是否可见。
 - **长文本按字节分段**：百度单次 `q` 上限 6000 字节（汉字约 2000 个），按 UTF-8 字节切段并合并译文，最多 8 段，超长明确提示。
 - 程序以 `asInvoker` 运行，不请求管理员权限；只有安装/卸载过程需要 UAC 提权。
@@ -223,7 +223,7 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，约 6 MB 压缩包
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，目标机零依赖
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1          # 安装包，取 artifacts 里最新的 exe
+powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate\QuickTranslate.exe   # 安装包，-Exe 必填
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.1.0
 ```
 

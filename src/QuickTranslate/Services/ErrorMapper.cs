@@ -21,6 +21,8 @@ public static class ErrorMapper
 {
     public static FailureInfo Map(Exception ex) => ex switch
     {
+        // 必须排在兜底分支之前：OCR 的文案是给系统设置用的，不能被改写成「翻译失败」
+        OcrException ocr => new(ocr.Message, ErrorAction.None),
         TranslationException translation => translation.Category switch
         {
             TranslationErrorCategory.Configuration => new(translation.Message, ErrorAction.Settings),
