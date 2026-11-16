@@ -207,10 +207,11 @@ public partial class MainWindow : Window
         string text = SourceBox.Text;
         int bytes = Encoding.UTF8.GetByteCount(text);
         CountText.Text = $"{text.Length} 字符 · {bytes:N0} 字节";
-        CountText.Foreground = bytes > 48000 ? ErrorBrush : CountNormalBrush;
-        CountText.ToolTip = bytes > 48000
-            ? "超过单次上限（8 段 × 6000 字节），请分成多次翻译"
-            : "百度单次上限 6000 字节，程序会自动分段（最多 8 段）";
+        // 上限直接引用翻译器里的常量，改分段策略时不用再到这里同步改一个魔法数
+        CountText.Foreground = bytes > BaiduTranslator.MaxInputBytes ? ErrorBrush : CountNormalBrush;
+        CountText.ToolTip = bytes > BaiduTranslator.MaxInputBytes
+            ? $"超过单次上限（{BaiduTranslator.MaxChunks} 段 × {BaiduTranslator.MaxQueryBytes} 字节），请分成多次翻译"
+            : $"百度单次上限 {BaiduTranslator.MaxQueryBytes} 字节，程序会自动分段（最多 {BaiduTranslator.MaxChunks} 段）";
     }
 
     private void Clear_OnClick(object sender, RoutedEventArgs e)

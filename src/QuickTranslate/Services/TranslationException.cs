@@ -12,6 +12,10 @@ public sealed class TranslationException : Exception
 {
     public TranslationErrorCategory Category { get; }
 
-    public TranslationException(string message, TranslationErrorCategory category) : base(message)
-        => Category = category;
+    /// <summary>服务端错误码（如 54003）。只用来判断该不该重试，永远不展示给用户。</summary>
+    public string? Code { get; }
+
+    public TranslationException(string message, TranslationErrorCategory category, string? code = null)
+        : base(message)
+        => (Category, Code) = (category, code);
 }

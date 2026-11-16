@@ -49,7 +49,7 @@
                        FontSize="11"
                        Foreground="#A0A6AE"
                        Margin="0,10,0,0"
-                       Text="点击译文复制 · 点击别处关闭 · 12 秒后收起" />
+                       Text="点击译文复制 · 点击别处关闭" />
         </StackPanel>
     </Border>
 </Window>

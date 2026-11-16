@@ -12,10 +12,27 @@ public sealed class BaiduTranslator
     private const string Endpoint = "https://fanyi-api.baidu.com/api/trans/vip/translate";
 
     // 官方限制是单次 q ≤ 6000 字节（汉字约 2000 个），不是 6000 字符，也不是 2000 字符。
-    private const int MaxQueryBytes = 6000;
-    private const int MaxChunks = 8;
+    public const int MaxQueryBytes = 6000;
+    public const int MaxChunks = 8;
 
+    /// <summary>单次翻译的输入上限（字节）。界面字数统计与这里的校验共用同一个值，避免两处各写一个魔法数。</summary>
+    public const int MaxInputBytes = MaxQueryBytes * MaxChunks;
+
+    /// <summary>单段请求的超时。分段是串行发出的，8 段最坏会叠到 80 秒，所以整条链路另有总预算。</summary>
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    /// <summary>
+    /// 整条翻译链路的总预算。长文本分段时单靠 HttpClient.Timeout 不够：
+    /// 每段各自 10 秒，8 段就能把界面卡住 80 秒，期间再按热键只会看到「取消」。
+    /// </summary>
+    private static readonly TimeSpan TotalBudget = TimeSpan.FromSeconds(20);
+
+    private const int MaxAttempts = 2;
+
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(350);
+
+    /// <summary>服务端明确要求「稍后再试」的错误码，值得退避重试一次，不要直接甩给用户。</summary>
+    private static readonly HashSet<string> RetryableCodes = ["54003", "52001", "52002"];
 
     private readonly AppConfig _config;
 
@@ -55,15 +72,30 @@ public sealed class BaiduTranslator
         string source = string.IsNullOrWhiteSpace(from) ? "auto" : from;
         string target = string.IsNullOrWhiteSpace(to) ? _config.TargetLanguage : to;
 
-        var builder = new StringBuilder();
-        foreach (string chunk in chunks)
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TotalBudget);
+
+        string translated;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (builder.Length > 0) builder.AppendLine();
-            builder.Append(await TranslateChunkAsync(chunk, source, target, cancellationToken));
+            var builder = new StringBuilder();
+            foreach (string chunk in chunks)
+            {
+                budget.Token.ThrowIfCancellationRequested();
+                if (builder.Length > 0) builder.AppendLine();
+                builder.Append(await TranslateChunkAsync(chunk, source, target, budget.Token));
+            }
+            translated = builder.ToString().TrimEnd();
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // 只有「总预算耗尽」才报这句话。单段请求撞上 HttpClient 自己的 10 秒超时时
+            // budget 并没有取消，这里不能把两种超时混为一谈，交给 ErrorMapper 报通用超时。
+            throw new TranslationException(
+                $"翻译超时：{chunks.Count} 段文本在 {TotalBudget.TotalSeconds:0} 秒内没有翻译完，请稍后重试或缩小选区。",
+                TranslationErrorCategory.Network);
         }
 
-        string translated = builder.ToString().TrimEnd();
         if (string.IsNullOrWhiteSpace(translated))
         {
             throw new TranslationException("翻译服务没有返回译文。", TranslationErrorCategory.Service);
@@ -71,7 +103,29 @@ public sealed class BaiduTranslator
         return translated;
     }
 
+    /// <summary>
+    /// 单段的送达逻辑：只有「服务端明确让你稍后再试」的错误码才退避重试，
+    /// 配置类、额度类错误立刻失败，避免把用户的配额浪费在必然失败的请求上。
+    /// </summary>
     private async Task<string> TranslateChunkAsync(
+        string query, string from, string to, CancellationToken cancellationToken)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SendChunkAsync(query, from, to, cancellationToken);
+            }
+            catch (TranslationException ex)
+                when (attempt < MaxAttempts && ex.Code is not null && RetryableCodes.Contains(ex.Code))
+            {
+                LogService.Info($"翻译第 {attempt} 次尝试返回 {ex.Code}，{RetryDelay.TotalMilliseconds:0}ms 后重试");
+                await Task.Delay(RetryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<string> SendChunkAsync(
         string query, string from, string to, CancellationToken cancellationToken)
     {
         string salt = Random.Shared.NextInt64(100000, 999999999).ToString(CultureInfo.InvariantCulture);
@@ -100,7 +154,7 @@ public sealed class BaiduTranslator
             string code = errorCode.GetString() ?? "unknown";
             string message = root.TryGetProperty("error_msg", out var msg) ? msg.GetString() ?? string.Empty : string.Empty;
             var mapped = MapError(code, message);
-            throw new TranslationException(mapped.Message, mapped.Category);
+            throw new TranslationException(mapped.Message, mapped.Category, code);
         }
 
         if (!root.TryGetProperty("trans_result", out var results))
