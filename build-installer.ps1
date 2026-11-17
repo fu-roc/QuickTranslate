@@ -48,7 +48,7 @@ if (-not $Version) {
     $versionMatch = Select-String -LiteralPath $csproj -Pattern '<Version>([^<]+)</Version>' |
         Select-Object -First 1
     if ($versionMatch) { $Version = $versionMatch.Matches[0].Groups[1].Value }
-    else { $Version = '1.1.1' }
+    else { $Version = '1.1.2' }
     Write-Host "Version : $Version (from csproj)"
 }
 if (-not $OutputDir) { $OutputDir = $artifacts }
