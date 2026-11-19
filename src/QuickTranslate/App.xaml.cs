@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using QuickTranslate.Models;
@@ -23,9 +22,7 @@ public partial class App : System.Windows.Application
     private MainWindow? _mainWindow;
     private UpdateWindow? _updateWindow;
     private BaiduTranslator _translator = null!;
-    private bool _busy;
     private CancellationTokenSource? _chainCts;
-    private bool _chainCancelled;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -43,7 +40,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _config = ConfigService.Load(out bool createdNewConfig, out string? configNotice);
+        _config = ConfigService.Load(out string? configNotice);
         _translator = new BaiduTranslator(_config);
         _result = new ResultWindow();
         _result.Hidden += CancelCurrentChain;
@@ -55,7 +52,7 @@ public partial class App : System.Windows.Application
         CheckAutoStart();
 
         if (configNotice is not null) _tray.Notify(configNotice);
-        if (createdNewConfig || !_config.IsConfigured)
+        if (!_config.IsConfigured)
         {
             _tray.Notify("请先填写百度翻译 APPID 和密钥");
             OpenSettings();
@@ -82,11 +79,6 @@ public partial class App : System.Windows.Application
         catch (Exception) { /* 通知失败不影响已记录的日志 */ }
     }
 
-    /// <summary>
-    /// 只读检查开机自启状态，绝不在此处写注册表。
-    /// 未签名 exe 在启动阶段写 HKCU\...\Run 会被 Defender 的
-    /// Behavior:Win32/Persistence.A!ml 判为「持久化」并隔离删除整个程序。
-    /// </summary>
     private void CheckAutoStart()
     {
         string? notice = AutoStartService.Check();
@@ -96,29 +88,19 @@ public partial class App : System.Windows.Application
     /// <summary>唯一的注册点：启动时、设置窗口关闭后都走这里，按当前 _config 注册。</summary>
     private void RegisterHotkeys()
     {
-        _hotkeys.UnregisterAll();
-        var errors = new List<string>();
-        string first = _hotkeys.Register(TakeWordHotkeyId, _config.TakeWordHotkey);
-        string second = _hotkeys.Register(OcrHotkeyId, _config.OcrHotkey);
-        if (!string.IsNullOrEmpty(first)) errors.Add($"取词翻译：{first}");
-        if (!string.IsNullOrEmpty(second)) errors.Add($"截图 OCR：{second}");
-        if (errors.Count > 0)
+        string error = _hotkeys.RegisterPair(TakeWordHotkeyId, _config.TakeWordHotkey, OcrHotkeyId, _config.OcrHotkey);
+        if (error.Length > 0)
         {
-            _result.ShowError(string.Join("；", errors), "打开设置", OpenSettings);
+            _result.ShowError(error, "打开设置", OpenSettings);
         }
     }
 
     private async void OnHotkeyPressed(int id)
     {
-        if (_busy)
+        if (_chainCts is not null || _result.IsVisible)
         {
             _result.HideWindow();
             CancelCurrentChain();
-            return;
-        }
-        if (_result.IsShowing)
-        {
-            _result.HideWindow();
             return;
         }
         await RunChainAsync(id);
@@ -129,52 +111,35 @@ public partial class App : System.Windows.Application
 
     private async Task RunChainAsync(int hotkeyId)
     {
-        if (_busy) return;
-        _busy = true;
+        if (_chainCts is not null) return;
+        using var cts = new CancellationTokenSource();
+        _chainCts = cts;
         try
         {
-            if (hotkeyId == TakeWordHotkeyId) await RunTakeWordAsync();
-            else if (hotkeyId == OcrHotkeyId) await RunOcrAsync();
+            if (hotkeyId == TakeWordHotkeyId) await RunTakeWordAsync(cts.Token);
+            else if (hotkeyId == OcrHotkeyId) await RunOcrAsync(cts.Token);
         }
-        catch (OperationCanceledException) when (_chainCancelled)
-        {
-            // 用户已经关掉窗口：迟到的结果不许再把悬浮窗弹回来
-        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
         catch (Exception ex)
         {
             LogService.Error($"链路 {hotkeyId} 异常", ex);
-            ShowFailure(ex, hotkeyId);
+            if (!cts.IsCancellationRequested) ShowFailure(ex, hotkeyId);
         }
         finally
         {
-            _busy = false;
+            _chainCts = null;
         }
-    }
-
-    private CancellationToken BeginChain()
-    {
-        CancelCurrentChain();
-        _chainCts = new CancellationTokenSource();
-        _chainCancelled = false;
-        return _chainCts.Token;
     }
 
     private void CancelCurrentChain()
     {
-        var cts = _chainCts;
-        _chainCts = null;
-        if (cts is null) return;
-        _chainCancelled = true;
-        try { cts.Cancel(); }
+        try { _chainCts?.Cancel(); }
         catch (Exception ex) { LogService.Warn("取消在途链路失败", ex); }
-        finally { cts.Dispose(); }
     }
 
-    private async Task RunTakeWordAsync()
+    private async Task RunTakeWordAsync(CancellationToken token)
     {
-        CancellationToken token = BeginChain();
-
-        // 取词阶段绝不显示或激活任何窗口，否则会抢走前台焦点，Ctrl+C 会发给自己
+        // 先从前台窗口复制选区，再显示悬浮窗。
         string? selected = await ClipboardService.CaptureSelectedTextAsync(token);
         token.ThrowIfCancellationRequested();
         if (selected is null)
@@ -186,15 +151,23 @@ public partial class App : System.Windows.Application
         }
 
         _result.ShowLoading("翻译中…");
-        string translated = await _translator.TranslateAsync(selected, token);
-        token.ThrowIfCancellationRequested();
-        _result.ShowResult(selected, translated);
+        BaiduTranslator translator = _translator;
+        if (_config.TargetLanguage == TranslationLanguage.SimplifiedChinese)
+        {
+            string[]? definitions = await EnglishChineseDictionary.FindAsync(selected, token);
+            token.ThrowIfCancellationRequested();
+            if (definitions is not null)
+            {
+                _result.ShowDefinitions(selected, definitions);
+                return;
+            }
+        }
+
+        await ShowTranslationAsync(selected, translator, token);
     }
 
-    private async Task RunOcrAsync()
+    private async Task RunOcrAsync(CancellationToken token)
     {
-        CancellationToken token = BeginChain();
-
         var cursor = NativeMethods.GetCursorPosition();
         var screen = System.Windows.Forms.Screen.FromPoint(cursor);
         double scale = NativeMethods.GetMonitorScale(cursor);
@@ -224,9 +197,14 @@ public partial class App : System.Windows.Application
         }
 
         _result.ShowLoading("翻译中…");
-        string translated = await _translator.TranslateAsync(recognized, token);
+        await ShowTranslationAsync(recognized, _translator, token);
+    }
+
+    private async Task ShowTranslationAsync(string source, BaiduTranslator translator, CancellationToken token)
+    {
+        string translated = await translator.TranslateAsync(source, token);
         token.ThrowIfCancellationRequested();
-        _result.ShowResult(recognized, translated);
+        _result.ShowResult(source, translated);
     }
 
     /// <summary>底层异常一律先映射成中文原因，再按错误类别决定是否给「打开设置」/「重试」。</summary>
@@ -247,39 +225,19 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>
-    /// 托盘左键单击 / 双击 / 右键「打开主界面」共用的唯一入口。窗口只隐藏不销毁，
-    /// 重复点击时复用同一个实例并激活，避免出现多个主窗口。
-    /// </summary>
     private void ShowMainWindow()
     {
-        if (_mainWindow is not null)
+        _mainWindow ??= new MainWindow(_config)
         {
-            if (!_mainWindow.IsVisible) _mainWindow.Show();
-            try { _mainWindow.Activate(); }
-            catch (Exception ex) { LogService.Warn("激活主界面失败", ex); }
-            return;
-        }
-
-        var window = new MainWindow(_config)
-        {
-            // lambda 捕获 this，每次调用都读当前 _translator；设置页保存后自动跟随新配置
-            TranslateAsync = async (text, from, to, token) =>
-                await _translator.TranslateAsync(text, from, to, token),
+            TranslateAsync = (text, from, to, token) => _translator.TranslateAsync(text, from, to, token),
             SaveLanguage = SaveMainWindowLanguage,
             OpenSettings = OpenSettings,
         };
-        _mainWindow = window;
-        window.Show();
-        try { window.Activate(); }
+        if (!_mainWindow.IsVisible) _mainWindow.Show();
+        try { _mainWindow.Activate(); }
         catch (Exception ex) { LogService.Warn("激活主界面失败", ex); }
     }
 
-    /// <summary>
-    /// 主界面的语种偏好单独落盘：只改 MainWindow* 两个字段，不动 TargetLanguage，
-    /// 所以划词 / 截图 OCR 恒用「自动检测 → 设置页目标语言」，完全不受影响。
-    /// 写盘失败不回滚内存里的选择，只提示本次选择重启后会恢复。
-    /// </summary>
     private string? SaveMainWindowLanguage(string from, string to)
     {
         _config.MainWindowSourceLanguage = from;
@@ -289,9 +247,7 @@ public partial class App : System.Windows.Application
             ConfigService.Save(_config);
             return null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                   or System.Security.SecurityException
-                                   or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ConfigService.IsSaveFailure(ex))
         {
             LogService.Error("主界面语言偏好保存失败", ex);
             return "语言偏好保存失败：无法写入配置文件，本次选择仍可用，重启后会恢复。详情见日志";
@@ -301,54 +257,40 @@ public partial class App : System.Windows.Application
     private void OpenSettings()
     {
         _result.HideWindow();
-        CancelCurrentChain(); // 窗口当时不可见时 Hidden 不会触发，这里兜底
+        CancelCurrentChain();
 
-        // 录制快捷键期间必须注销旧热键，否则用户想录入的组合键会被旧热键抢走并触发翻译
+        // 录制期间由设置窗口接收按键。
         _hotkeys.UnregisterAll();
-
-        var window = new SettingsWindow(_config) { ApplyConfig = ApplyConfig };
-        window.CheckForUpdates = ShowUpdateWindow;
-        window.ShowDialog();
-
-        // 无论保存成功、失败还是取消，都由唯一的注册点按当前生效的 _config 恢复
-        RegisterHotkeys();
+        try
+        {
+            new SettingsWindow(_config) { ApplyConfig = ApplyConfig, CheckForUpdates = ShowUpdateWindow }.ShowDialog();
+        }
+        finally { RegisterHotkeys(); }
     }
 
-    /// <summary>
-    /// 应用新配置：热键只做「能否注册」的校验且不保留注册状态，配置写盘成功后才提交内存状态；
-    /// 任一步失败都不留下新状态，窗口保持打开，旧热键在窗口关闭时由 RegisterHotkeys 统一恢复。
-    /// </summary>
     private string? ApplyConfig(AppConfig config, bool autoStart)
     {
-        // 设置页会重建 AppConfig 对象，主界面语种偏好不在表单里，必须显式带过去，
-        // 否则用户点一次「保存」就会把主界面记住的语种重置掉。
+        // 主界面单独保存语种偏好。
         config.MainWindowSourceLanguage = _config.MainWindowSourceLanguage;
         config.MainWindowTargetLanguage = _config.MainWindowTargetLanguage;
 
-        // 1) 无持久副作用的热键校验（校验完立即注销，不留下「新键已生效但配置没保存」的状态）
         string failure = _hotkeys.ValidatePair(
             TakeWordHotkeyId, config.TakeWordHotkey,
             OcrHotkeyId, config.OcrHotkey);
         if (!string.IsNullOrEmpty(failure)) return failure;
 
-        bool previousAutoStart = AutoStartService.IsEnabled();
-        bool pathWasStale = previousAutoStart && !AutoStartService.IsPathCurrent();
+        var (previousAutoStart, pathWasCurrent) = AutoStartService.GetStatus();
 
-        // 2) 原子写盘；此步失败时没有任何其他副作用，直接返回
         try
         {
             ConfigService.Save(config);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                   or System.Security.SecurityException
-                                   or System.Security.Cryptography.CryptographicException)
+        catch (Exception ex) when (ConfigService.IsSaveFailure(ex))
         {
             LogService.Error("配置写盘失败", ex);
             return "配置保存失败：无法写入配置文件，请检查 %APPDATA% 目录权限，详情见日志";
         }
 
-        // 3) 每次保存都调用 Apply（内部幂等：值已正确时不写注册表，不增加 Defender 行为）。
-        //    这样程序搬家后指向旧路径的自启项，用户点一次「保存」就能自动修正。
         string? autoStartError = AutoStartService.Apply(autoStart);
         if (autoStartError is not null)
         {
@@ -372,32 +314,20 @@ public partial class App : System.Windows.Application
         var notices = new List<string>();
         if (hotkeysChanged) notices.Add($"快捷键已更新：{config.TakeWordHotkey} 取词 / {config.OcrHotkey} 截图");
         if (autoStart != previousAutoStart) notices.Add(autoStart ? "开机自启已开启" : "开机自启已关闭");
-        else if (pathWasStale && autoStart) notices.Add("开机自启路径已更新");
+        else if (!pathWasCurrent && autoStart) notices.Add("开机自启路径已更新");
         if (notices.Count > 0) _tray.Notify(string.Join("；", notices));
         return null;
     }
 
-    /// <summary>
-    /// 托盘菜单与设置页共用的唯一入口。窗口是用户主动点开的，所以会正常激活；
-    /// 重复点击时只激活已有窗口，不叠加多个检查请求。
-    /// </summary>
     private void ShowUpdateWindow()
     {
-        if (_updateWindow is { IsVisible: true })
+        if (_updateWindow is null)
         {
-            try { _updateWindow.Activate(); }
-            catch (Exception ex) { LogService.Warn("激活更新窗口失败", ex); }
-            return;
+            _updateWindow = new UpdateWindow();
+            _updateWindow.Closed += (_, _) => _updateWindow = null;
+            _updateWindow.Show();
         }
-
-        var window = new UpdateWindow();
-        _updateWindow = window;
-        window.Closed += (_, _) =>
-        {
-            if (ReferenceEquals(_updateWindow, window)) _updateWindow = null;
-        };
-        window.Show();
-        try { window.Activate(); }
+        try { _updateWindow?.Activate(); }
         catch (Exception ex) { LogService.Warn("激活更新窗口失败", ex); }
     }
 
@@ -414,7 +344,6 @@ public partial class App : System.Windows.Application
     {
         _hotkeys?.Dispose();
         _tray?.Dispose();
-        _chainCts?.Dispose();
         LogService.Info("QuickTranslate 退出");
         // 命名 Mutex 已存在时当前线程并不拥有它，无条件 ReleaseMutex 会在退出时抛未处理异常
         if (_ownsSingletonMutex)

@@ -7,14 +7,11 @@ using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using WpfButton = System.Windows.Controls.Button;
-using AutoStart = QuickTranslate.Services.AutoStartService;
 
 namespace QuickTranslate.Windows;
 
 public partial class SettingsWindow : Window
 {
-    private const string DefaultTakeWordHotkey = "Alt+T";
-    private const string DefaultOcrHotkey = "Alt+S";
     private const string CapturePlaceholder = "请按下组合键…";
 
     /// <summary>
@@ -37,13 +34,12 @@ public partial class SettingsWindow : Window
         SecretBox.Password = config.Secret;
         TakeWordBox.Text = config.TakeWordHotkey;
         OcrBox.Text = config.OcrHotkey;
+        LanguageBox.ItemsSource = TranslationLanguage.Targets;
         LanguageBox.SelectedValue = config.TargetLanguage;
-        // 以注册表真实状态为准，而不是缓存的勾选值：用户在任务管理器里禁用后这里会如实反映
-        AutoStartBox.IsChecked = AutoStart.IsEnabled();
+        AutoStartBox.IsChecked = AutoStartService.GetStatus().Enabled;
 
         VersionText.Text = $"版本 {AppVersion.Display} · 日志：%LOCALAPPDATA%\\QuickTranslate\\app.log";
 
-        // 手改过 config.json 时目标语言可能不在下拉列表里，别静默回退成 zh
         if (LanguageBox.SelectedItem is null)
         {
             SetStatus($"配置里的目标语言「{config.TargetLanguage}」不在列表中，保存时会回到「简体中文」。", isError: true);
@@ -68,9 +64,9 @@ public partial class SettingsWindow : Window
     private void ResetHotkeys_OnClick(object sender, RoutedEventArgs e)
     {
         EndCapture(restore: true);
-        TakeWordBox.Text = DefaultTakeWordHotkey;
-        OcrBox.Text = DefaultOcrHotkey;
-        SetStatus("已恢复为 Alt+T / Alt+S，点「保存」后生效", isError: false);
+        TakeWordBox.Text = AppConfig.DefaultTakeWordHotkey;
+        OcrBox.Text = AppConfig.DefaultOcrHotkey;
+        SetStatus($"已恢复为 {TakeWordBox.Text} / {OcrBox.Text}，点「保存」后生效", isError: false);
     }
 
     private void BeginCapture(WpfTextBox box, WpfButton button)
@@ -173,19 +169,19 @@ public partial class SettingsWindow : Window
         string takeWord = TakeWordBox.Text.Trim();
         string ocr = OcrBox.Text.Trim();
 
-        if (!HotkeyCodec.TryParse(takeWord, out _, out _, out string takeWordError))
+        if (!HotkeyCodec.TryParse(takeWord, out uint takeWordModifiers, out uint takeWordKey, out string takeWordError))
         {
             SetStatus($"取词快捷键：{takeWordError}", isError: true);
             TakeWordBox.Focus();
             return;
         }
-        if (!HotkeyCodec.TryParse(ocr, out _, out _, out string ocrError))
+        if (!HotkeyCodec.TryParse(ocr, out uint ocrModifiers, out uint ocrKey, out string ocrError))
         {
             SetStatus($"截图快捷键：{ocrError}", isError: true);
             OcrBox.Focus();
             return;
         }
-        if (HotkeyCodec.Normalize(takeWord) == HotkeyCodec.Normalize(ocr))
+        if ((takeWordModifiers, takeWordKey) == (ocrModifiers, ocrKey))
         {
             SetStatus("两个快捷键不能相同，请给取词翻译和截图 OCR 各留一组", isError: true);
             return;
@@ -197,12 +193,11 @@ public partial class SettingsWindow : Window
             Secret = SecretBox.Password.Trim(),
             TakeWordHotkey = takeWord,
             OcrHotkey = ocr,
-            TargetLanguage = LanguageBox.SelectedValue as string ?? "zh",
+            TargetLanguage = LanguageBox.SelectedValue as string ?? TranslationLanguage.SimplifiedChinese,
         };
 
         bool autoStart = AutoStartBox.IsChecked == true;
 
-        // 任一副作用失败时配置不落盘、窗口不关闭、旧热键在窗口关闭后自动恢复
         string? failure = ApplyConfig?.Invoke(config, autoStart);
         if (failure is not null)
         {

@@ -6,55 +6,43 @@ using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace QuickTranslate.Windows;
 
-/// <summary>
-/// 手动检查更新的结果窗。它是用户主动点开的，所以会正常激活并接收键盘；
-/// 与翻译结果窗「绝不抢焦点」的策略相反。
-/// </summary>
 public partial class UpdateWindow : Window
 {
     private CancellationTokenSource? _cts;
     private string? _releaseUrl;
-    private bool _closed;
 
     public UpdateWindow()
     {
         InitializeComponent();
         Loaded += async (_, _) => await RunCheckAsync();
-        Closed += (_, _) =>
-        {
-            _closed = true;
-            CancelCheck();
-        };
+        Closed += (_, _) => CancelCheck();
     }
 
     private async Task RunCheckAsync()
     {
-        if (_closed) return;
-
         CancelCheck();
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         _cts = cts;
-        SetChecking();
-
-        UpdateCheckResult result;
         try
         {
-            result = await UpdateService.CheckAsync(cts.Token);
+            SetChecking();
+            var result = await UpdateService.CheckAsync(cts.Token);
+            if (!cts.IsCancellationRequested) Apply(result);
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            // CheckAsync 内部已经分类兜底，这里是最后一道保险，绝不让 async void 抛到全局钩子
             LogService.Error("更新窗口：检查流程异常", ex);
-            result = new UpdateCheckResult(
-                UpdateStatus.Failed,
-                "检查更新失败：程序遇到意外错误，详情已写入日志。",
-                UpdateService.CurrentVersion);
+            if (!cts.IsCancellationRequested)
+            {
+                Apply(new UpdateCheckResult(UpdateStatus.Failed,
+                    "检查更新失败：程序遇到意外错误，详情已写入日志。", AppVersion.Value));
+            }
         }
-
-        // 用户在检查期间点了「重试」或关了窗，旧请求的结果不许覆盖新状态
-        if (_closed || cts.IsCancellationRequested || !ReferenceEquals(_cts, cts)) return;
-        try { Apply(result); }
-        catch (Exception ex) { LogService.Error("更新窗口：呈现检查结果失败", ex); }
+        finally
+        {
+            if (ReferenceEquals(_cts, cts)) _cts = null;
+        }
     }
 
     private void SetChecking()
@@ -68,9 +56,7 @@ public partial class UpdateWindow : Window
         VersionText.Text = string.Empty;
         _releaseUrl = null;
         RetryButton.Visibility = Visibility.Collapsed;
-        RetryButton.IsEnabled = false;
         DownloadButton.Visibility = Visibility.Collapsed;
-        DownloadButton.IsEnabled = false;
     }
 
     private void Apply(UpdateCheckResult result)
@@ -81,60 +67,24 @@ public partial class UpdateWindow : Window
             ? "未知"
             : UpdateService.Format(result.LatestVersion);
 
-        switch (result.Status)
+        (string title, string color, string caption) = result.Status switch
         {
-            case UpdateStatus.Available:
-                TitleText.Text = $"发现新版本 {remote}";
-                TitleText.Foreground = Brush("#2F6BED");
-                StatusText.Text = result.Message;
-                StatusText.Foreground = Brush("#1F2937");
-                ShowNotes(result.Notes);
-                VersionText.Text = $"当前版本 {local} · 检查时间 {DateTime.Now:HH:mm:ss}";
-                ShowDownloadButton("打开下载页面");
-                RetryButton.Visibility = Visibility.Collapsed;
-                break;
-
-            case UpdateStatus.UpToDate:
-                TitleText.Text = "已是最新版本";
-                TitleText.Foreground = Brush("#1D6F42");
-                StatusText.Text = result.Message;
-                StatusText.Foreground = Brush("#1F2937");
-                ShowNotes(result.Notes);
-                VersionText.Text = $"当前版本 {local} · 远端版本 {remote} · 检查时间 {DateTime.Now:HH:mm:ss}";
-                ShowDownloadButton("查看发布页面");
-                RetryButton.Visibility = Visibility.Collapsed;
-                break;
-
-            case UpdateStatus.Failed:
-                TitleText.Text = "检查更新失败";
-                TitleText.Foreground = Brush("#C0392B");
-                StatusText.Text = result.Message;
-                StatusText.Foreground = Brush("#C0392B");
-                NotesPanel.Visibility = Visibility.Collapsed;
-                VersionText.Text = $"当前版本 {local} · 检查时间 {DateTime.Now:HH:mm:ss}";
-                RetryButton.Visibility = Visibility.Visible;
-                RetryButton.IsEnabled = true;
-                ShowDownloadButton("手动打开发布页面");
-                break;
-
-            case UpdateStatus.Cancelled:
-            default:
-                return;
-        }
-    }
-
-    private void ShowNotes(string? notes)
-    {
-        bool hasNotes = !string.IsNullOrWhiteSpace(notes);
-        NotesPanel.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
-        NotesText.Text = hasNotes ? notes! : string.Empty;
-    }
-
-    private void ShowDownloadButton(string caption)
-    {
+            UpdateStatus.Available => ($"发现新版本 {remote}", "#2F6BED", "打开下载页面"),
+            UpdateStatus.UpToDate => ("已是最新版本", "#1D6F42", "查看发布页面"),
+            _ => ("检查更新失败", "#C0392B", "手动打开发布页面"),
+        };
+        bool failed = result.Status == UpdateStatus.Failed;
+        TitleText.Text = title;
+        TitleText.Foreground = Brush(color);
+        StatusText.Text = result.Message;
+        StatusText.Foreground = Brush(failed ? color : "#1F2937");
+        NotesText.Text = result.Notes ?? string.Empty;
+        NotesPanel.Visibility = NotesText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        string remoteVersion = result.Status == UpdateStatus.UpToDate ? $" · 远端版本 {remote}" : string.Empty;
+        VersionText.Text = $"当前版本 {local}{remoteVersion} · 检查时间 {DateTime.Now:HH:mm:ss}";
+        RetryButton.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
         DownloadButton.Content = caption;
         DownloadButton.Visibility = Visibility.Visible;
-        DownloadButton.IsEnabled = true;
     }
 
     private void Download_OnClick(object sender, RoutedEventArgs e) => OpenReleasePage();
@@ -168,11 +118,7 @@ public partial class UpdateWindow : Window
         return UpdateService.ReleasesPageUrl;
     }
 
-    private async void Retry_OnClick(object sender, RoutedEventArgs e)
-    {
-        try { await RunCheckAsync(); }
-        catch (Exception ex) { LogService.Error("更新窗口：重试失败", ex); }
-    }
+    private async void Retry_OnClick(object sender, RoutedEventArgs e) => await RunCheckAsync();
 
     private void Close_OnClick(object sender, RoutedEventArgs e) => Close();
 
@@ -188,7 +134,6 @@ public partial class UpdateWindow : Window
         if (cts is null) return;
         try { cts.Cancel(); }
         catch (Exception ex) { LogService.Warn("检查更新：取消在途请求失败", ex); }
-        finally { cts.Dispose(); }
     }
 
     private static System.Windows.Media.SolidColorBrush Brush(string hex)

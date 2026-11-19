@@ -103,7 +103,9 @@ internal static class NativeMethods
     }
 
     /// <summary>全局物理左键状态。结果窗不激活，收不到窗口外点击的 WPF 事件，只能靠它轮询。</summary>
-    public static bool IsLeftButtonDown() => (GetAsyncKeyStateNative(VkLButton) & 0x8000) != 0;
+    public static bool IsLeftButtonDown() => IsKeyDown(VkLButton);
+
+    public static bool IsKeyDown(int virtualKey) => (GetAsyncKeyStateNative(virtualKey) & 0x8000) != 0;
 
     /// <summary>返回光标所在显示器的 DPI 缩放比，用于把物理像素换算成 WPF 的 DIP。</summary>
     public static double GetMonitorScale(Point physicalPoint)
@@ -115,7 +117,7 @@ internal static class NativeMethods
         return dpiX == 0 ? 1.0 : dpiX / 96.0;
     }
 
-    /// <summary>长按热键不放时的兜底：主动清除系统里残留的修饰键按下状态。</summary>
+    /// <summary>注入 Ctrl+C 前释放修饰键。</summary>
     public static void ReleaseModifierKeys()
     {
         ushort[] modifiers = [0x10, 0x11, 0x12, 0x5B, 0x5C]; // Shift / Ctrl / Alt / LWin / RWin

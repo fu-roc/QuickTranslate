@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using WpfKey = System.Windows.Input.Key;
 using KeyInterop = System.Windows.Input.KeyInterop;
@@ -11,10 +10,10 @@ namespace QuickTranslate.Native;
 /// </summary>
 internal static class HotkeyCodec
 {
-    public const uint ModAlt = 0x0001;
-    public const uint ModControl = 0x0002;
-    public const uint ModShift = 0x0004;
-    public const uint ModWin = 0x0008;
+    private const uint ModAlt = 0x0001;
+    private const uint ModControl = 0x0002;
+    private const uint ModShift = 0x0004;
+    private const uint ModWin = 0x0008;
 
     private const int VkShift = 0x10;
     private const int VkControl = 0x11;
@@ -30,9 +29,6 @@ internal static class HotkeyCodec
     private const uint VkDelete = 0x2E;
     private const uint VkTab = 0x09;
     private const uint VkEscape = 0x1B;
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
 
     private static readonly Dictionary<string, uint> ModifierAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -181,7 +177,7 @@ internal static class HotkeyCodec
             return false;
         }
 
-        if (!DisplayByVk.ContainsKey(vk))
+        if (!DisplayByVk.TryGetValue(vk, out string? display))
         {
             error = $"按键「{key}」暂不支持，可用 {SupportedKeysHint}";
             return false;
@@ -189,19 +185,6 @@ internal static class HotkeyCodec
 
         error = ReservedReason(modifiers, vk);
         if (error.Length > 0) return false;
-
-        return TryFormat(modifiers, vk, out text, out error);
-    }
-
-    public static bool TryFormat(uint modifiers, uint virtualKey, out string text, out string error)
-    {
-        text = string.Empty;
-        error = string.Empty;
-        if (!DisplayByVk.TryGetValue(virtualKey, out string? display))
-        {
-            error = "不支持的按键";
-            return false;
-        }
 
         var builder = new StringBuilder();
         if ((modifiers & ModControl) != 0) builder.Append("Ctrl+");
@@ -213,18 +196,8 @@ internal static class HotkeyCodec
         return true;
     }
 
-    /// <summary>规范化后用于判断两个快捷键是否重复（别名、大小写、修饰键顺序均视为相同）。</summary>
-    public static string Normalize(string text)
-    {
-        if (TryParseCore(text, out uint modifiers, out uint virtualKey))
-        {
-            return $"{modifiers}:{virtualKey}";
-        }
-        return text.Trim().ToUpperInvariant();
-    }
-
     /// <summary>返回系统保留/内部冲突的中文原因，空字符串表示可用。</summary>
-    public static string ReservedReason(uint modifiers, uint virtualKey)
+    private static string ReservedReason(uint modifiers, uint virtualKey)
     {
         bool ctrl = (modifiers & ModControl) != 0;
         bool alt = (modifiers & ModAlt) != 0;
@@ -266,21 +239,6 @@ internal static class HotkeyCodec
         return string.Empty;
     }
 
-    private static bool TryParseCore(string text, out uint modifiers, out uint virtualKey)
-    {
-        modifiers = 0;
-        virtualKey = 0;
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        string[] parts = text.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < parts.Length - 1; i++)
-        {
-            if (!ModifierAliases.TryGetValue(parts[i], out uint modifier)) return false;
-            modifiers |= modifier;
-        }
-        return parts.Length > 0 && TryResolveKey(parts[^1], out virtualKey);
-    }
-
     private static bool TryResolveKey(string token, out uint virtualKey)
     {
         if (token.Length == 1)
@@ -298,14 +256,12 @@ internal static class HotkeyCodec
     private static uint ReadPressedModifiers()
     {
         uint modifiers = 0;
-        if (IsDown(VkControl) || IsDown(VkLControl) || IsDown(VkRControl)) modifiers |= ModControl;
-        if (IsDown(VkMenu) || IsDown(VkLMenu) || IsDown(VkRMenu)) modifiers |= ModAlt;
-        if (IsDown(VkShift) || IsDown(VkLShift) || IsDown(VkRShift)) modifiers |= ModShift;
-        if (IsDown(VkLWin) || IsDown(VkRWin)) modifiers |= ModWin;
+        if (NativeMethods.IsKeyDown(VkControl) || NativeMethods.IsKeyDown(VkLControl) || NativeMethods.IsKeyDown(VkRControl)) modifiers |= ModControl;
+        if (NativeMethods.IsKeyDown(VkMenu) || NativeMethods.IsKeyDown(VkLMenu) || NativeMethods.IsKeyDown(VkRMenu)) modifiers |= ModAlt;
+        if (NativeMethods.IsKeyDown(VkShift) || NativeMethods.IsKeyDown(VkLShift) || NativeMethods.IsKeyDown(VkRShift)) modifiers |= ModShift;
+        if (NativeMethods.IsKeyDown(VkLWin) || NativeMethods.IsKeyDown(VkRWin)) modifiers |= ModWin;
         return modifiers;
     }
-
-    private static bool IsDown(int virtualKey) => (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
     private static bool IsModifierVk(uint virtualKey) => virtualKey is
         0x10 or 0x11 or 0x12 or 0x5B or 0x5C or

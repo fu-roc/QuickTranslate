@@ -7,13 +7,6 @@ using QuickTranslate.Models;
 
 namespace QuickTranslate.Services;
 
-/// <summary>
-/// 配置读写。三条硬约束：
-/// 1) 写盘用「临时文件 + File.Move(overwrite)」原子替换，写一半崩了不会留下截断的 JSON；
-/// 2) 配置损坏或密钥无法解密时，先备份 .bak 并返回中文提示，绝不静默覆盖可能含密钥的原文件；
-/// 3) 任何读写异常都在本类内消化，Load 永远不会把异常抛到 OnStartup 把程序崩在启动阶段。
-/// 密钥用 DPAPI(CurrentUser) 加密后存盘，内存中仍是明文供签名使用。
-/// </summary>
 public static class ConfigService
 {
     private const string EncryptedPrefix = "dpapi:v1:";
@@ -28,21 +21,20 @@ public static class ConfigService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static string ConfigPath => Path.Combine(ConfigDirectory, "config.json");
+    private static readonly string ConfigPath = Path.Combine(ConfigDirectory, "config.json");
 
-    public static string BackupPath => ConfigPath + ".bak";
+    private static readonly string BackupPath = ConfigPath + ".bak";
 
-    /// <summary>notice 是需要展示给用户的中文提示（正常时为 null）；createdNew 表示首次生成了配置文件。</summary>
-    public static AppConfig Load(out bool createdNew, out string? notice)
+    public static AppConfig Load(out string? notice)
     {
-        createdNew = false;
         notice = null;
 
         string? json;
         try
         {
-            json = File.Exists(ConfigPath) ? File.ReadAllText(ConfigPath) : null;
+            json = File.ReadAllText(ConfigPath);
         }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { json = null; }
         catch (Exception ex) when (IsStorageFailure(ex))
         {
             notice = $"配置文件读取失败（{Describe(ex)}）。本次使用临时配置，原文件不会被覆盖。";
@@ -56,7 +48,6 @@ public static class ConfigService
             try
             {
                 Save(fresh);
-                createdNew = true;
             }
             catch (Exception ex) when (IsSaveFailure(ex))
             {
@@ -66,13 +57,22 @@ public static class ConfigService
             return fresh;
         }
 
-        StoredConfig stored;
         AppConfig config;
+        bool encryptOnLoad;
         try
         {
-            stored = JsonSerializer.Deserialize<StoredConfig>(json, JsonOptions)
+            config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions)
                      ?? throw new JsonException("配置内容为空");
-            config = FromStored(stored);
+            string secret = config.Secret ?? string.Empty;
+            bool encrypted = secret.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
+            encryptOnLoad = secret.Length > 0 && !encrypted;
+            config.Secret = encrypted ? Decrypt(secret) : secret;
+            config.AppId ??= string.Empty;
+            config.TakeWordHotkey = Fallback(config.TakeWordHotkey, AppConfig.DefaultTakeWordHotkey);
+            config.OcrHotkey = Fallback(config.OcrHotkey, AppConfig.DefaultOcrHotkey);
+            config.TargetLanguage = Fallback(config.TargetLanguage, TranslationLanguage.SimplifiedChinese);
+            config.MainWindowSourceLanguage = Fallback(config.MainWindowSourceLanguage, TranslationLanguage.Auto);
+            config.MainWindowTargetLanguage ??= string.Empty;
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException or FormatException or NotSupportedException)
         {
@@ -80,18 +80,16 @@ public static class ConfigService
             notice = $"配置文件无法解析或密钥无法解密（{Describe(ex)}）；原文件已保留" +
                      (backup is null ? "" : $"，并备份为 {Path.GetFileName(backup)}") +
                      "。请在设置里重新填写 APPID 与密钥。";
-            LogService.Error("ConfigService.Load: 配置不可读，已备份", ex);
+            LogService.Error("配置不可读", ex);
             return new AppConfig();
         }
 
-        // 一次性迁移：旧版明文配置在首次启动时就地加密，之后不再保留双格式读取逻辑。
-        if (!string.IsNullOrEmpty(config.Secret) && !IsEncrypted(stored.Secret))
+        if (encryptOnLoad)
         {
             try
             {
                 Save(config);
                 notice = "已把原有的明文密钥加密保存。";
-                LogService.Info("ConfigService: 明文密钥已一次性迁移为 DPAPI 加密");
             }
             catch (Exception ex) when (IsSaveFailure(ex))
             {
@@ -106,7 +104,8 @@ public static class ConfigService
     public static void Save(AppConfig config)
     {
         Directory.CreateDirectory(ConfigDirectory);
-        string json = JsonSerializer.Serialize(ToStored(config), JsonOptions);
+        string secret = string.IsNullOrEmpty(config.Secret) ? string.Empty : Encrypt(config.Secret);
+        string json = JsonSerializer.Serialize(config with { Secret = secret }, JsonOptions);
 
         // 同目录下的临时文件保证 File.Move 是同一卷内的原子替换，不会跨卷拷贝。
         string temp = Path.Combine(ConfigDirectory, $"config.{Guid.NewGuid():N}.tmp");
@@ -138,31 +137,6 @@ public static class ConfigService
         }
     }
 
-    private static AppConfig FromStored(StoredConfig stored) => new()
-    {
-        AppId = stored.AppId ?? string.Empty,
-        Secret = IsEncrypted(stored.Secret)
-            ? Decrypt(stored.Secret!)
-            : stored.Secret ?? string.Empty,
-        TakeWordHotkey = Fallback(stored.TakeWordHotkey, "Alt+T"),
-        OcrHotkey = Fallback(stored.OcrHotkey, "Alt+S"),
-        TargetLanguage = Fallback(stored.TargetLanguage, "zh"),
-        MainWindowSourceLanguage = Fallback(stored.MainWindowSourceLanguage, "auto"),
-        // 空字符串是有效值（表示跟随全局目标语言），不能用 Fallback 吃掉
-        MainWindowTargetLanguage = stored.MainWindowTargetLanguage ?? string.Empty,
-    };
-
-    private static StoredConfig ToStored(AppConfig config) => new()
-    {
-        AppId = config.AppId,
-        Secret = string.IsNullOrEmpty(config.Secret) ? string.Empty : Encrypt(config.Secret),
-        TakeWordHotkey = config.TakeWordHotkey,
-        OcrHotkey = config.OcrHotkey,
-        TargetLanguage = config.TargetLanguage,
-        MainWindowSourceLanguage = config.MainWindowSourceLanguage,
-        MainWindowTargetLanguage = config.MainWindowTargetLanguage,
-    };
-
     private static string Encrypt(string plain)
     {
         byte[] data = ProtectedData.Protect(
@@ -177,16 +151,13 @@ public static class ConfigService
             ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser));
     }
 
-    private static bool IsEncrypted(string? value) =>
-        value is not null && value.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
-
     private static string Fallback(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value;
 
     private static bool IsStorageFailure(Exception ex) =>
         ex is IOException or UnauthorizedAccessException or System.Security.SecurityException;
 
-    private static bool IsSaveFailure(Exception ex) =>
+    internal static bool IsSaveFailure(Exception ex) =>
         IsStorageFailure(ex) || ex is CryptographicException or NotSupportedException;
 
     private static string Describe(Exception ex) => ex switch
@@ -198,19 +169,4 @@ public static class ConfigService
         IOException => "磁盘或文件读写错误",
         _ => "未知错误",
     };
-
-}
-
-/// <summary>落盘格式。Secret 字段存的是 DPAPI 密文，不是明文。</summary>
-internal sealed class StoredConfig
-{
-    public StoredConfig() { }
-
-    public string? AppId { get; set; }
-    public string? Secret { get; set; }
-    public string? TakeWordHotkey { get; set; }
-    public string? OcrHotkey { get; set; }
-    public string? TargetLanguage { get; set; }
-    public string? MainWindowSourceLanguage { get; set; }
-    public string? MainWindowTargetLanguage { get; set; }
 }

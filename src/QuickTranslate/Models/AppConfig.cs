@@ -2,26 +2,28 @@ using System.Text.Json.Serialization;
 
 namespace QuickTranslate.Models;
 
-public sealed class AppConfig
+public sealed record AppConfig
 {
+    public const string DefaultTakeWordHotkey = "Alt+T";
+    public const string DefaultOcrHotkey = "Alt+S";
+
     public string AppId { get; set; } = string.Empty;
 
     public string Secret { get; set; } = string.Empty;
 
-    public string TakeWordHotkey { get; set; } = "Alt+T";
+    public string TakeWordHotkey { get; set; } = DefaultTakeWordHotkey;
 
-    public string OcrHotkey { get; set; } = "Alt+S";
+    public string OcrHotkey { get; set; } = DefaultOcrHotkey;
 
-    public string TargetLanguage { get; set; } = "zh";
+    public string TargetLanguage { get; set; } = TranslationLanguage.SimplifiedChinese;
 
-    /// <summary>主界面手动翻译的源语言（auto = 自动检测）。只影响主界面；划词 / OCR 恒用 auto。</summary>
-    public string MainWindowSourceLanguage { get; set; } = "auto";
+    public string MainWindowSourceLanguage { get; set; } = TranslationLanguage.Auto;
 
-    /// <summary>
-    /// 主界面手动翻译的目标语言。只影响主界面；留空表示跟随全局 TargetLanguage，
-    /// 用户在主界面选过一次后写入具体值，此后与设置页互不干扰。
-    /// </summary>
+    /// <summary>留空时主界面跟随全局目标语言。</summary>
     public string MainWindowTargetLanguage { get; set; } = string.Empty;
+
+    // 配置包含密钥，避免 record 的默认 ToString 生成带密钥的诊断文本。
+    public override string ToString() => nameof(AppConfig);
 
     [JsonIgnore]
     public bool IsConfigured =>

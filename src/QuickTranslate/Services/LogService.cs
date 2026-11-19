@@ -16,8 +16,6 @@ public static class LogService
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "QuickTranslate", "app.log");
 
-    public static string LogFilePath => LogPath;
-
     public static void Info(string message) => Write("INFO", message, null);
 
     public static void Warn(string message, Exception? ex = null) => Write("WARN", message, ex);

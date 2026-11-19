@@ -25,7 +25,7 @@
                            FontSize="17"
                            FontWeight="SemiBold"
                            Foreground="#1F2937" />
-                <TextBlock Text="手动翻译 · 划词与截图仍用快捷键"
+                <TextBlock Text="手动翻译"
                            FontSize="12"
                            Foreground="#9AA0A6"
                            Margin="10,4,0,0" />
@@ -36,7 +36,7 @@
                            Foreground="#9AA0A6"
                            VerticalAlignment="Center"
                            Margin="0,0,12,0"
-                           ToolTip="划词与截图 OCR 仍按设置页的「自动检测 → 目标语言」翻译，不受这里影响。" />
+                           ToolTip="在设置页选择划词和截图 OCR 的目标语言。" />
                 <Button Content="设置"
                         Width="62"
                         Padding="8,4"
@@ -61,20 +61,10 @@
                     <ComboBox x:Name="SourceLanguageBox"
                               Width="132"
                               Padding="6,3"
-                              SelectedValuePath="Tag"
+                              SelectedValuePath="Code"
+                              DisplayMemberPath="Name"
                               SelectionChanged="Language_OnChanged"
-                              ToolTip="默认自动检测。这里的选择只作用于本窗口的手动翻译。">
-                        <ComboBoxItem Tag="auto" Content="自动检测" />
-                        <ComboBoxItem Tag="zh" Content="简体中文" />
-                        <ComboBoxItem Tag="cht" Content="繁体中文" />
-                        <ComboBoxItem Tag="en" Content="英语" />
-                        <ComboBoxItem Tag="jp" Content="日语" />
-                        <ComboBoxItem Tag="kor" Content="韩语" />
-                        <ComboBoxItem Tag="fra" Content="法语" />
-                        <ComboBoxItem Tag="de" Content="德语" />
-                        <ComboBoxItem Tag="spa" Content="西班牙语" />
-                        <ComboBoxItem Tag="ru" Content="俄语" />
-                    </ComboBox>
+                              ToolTip="默认自动检测。" />
                 </StackPanel>
                 <Border BorderBrush="#E3E8EF"
                         BorderThickness="1"
@@ -112,19 +102,9 @@
                     <ComboBox x:Name="TargetLanguageBox"
                               Width="132"
                               Padding="6,3"
-                              SelectedValuePath="Tag"
-                              SelectionChanged="Language_OnChanged"
-                              ToolTip="主界面的译文语言，与设置页的划词 / OCR 目标语言相互独立。">
-                        <ComboBoxItem Tag="zh" Content="简体中文" />
-                        <ComboBoxItem Tag="cht" Content="繁体中文" />
-                        <ComboBoxItem Tag="en" Content="英语" />
-                        <ComboBoxItem Tag="jp" Content="日语" />
-                        <ComboBoxItem Tag="kor" Content="韩语" />
-                        <ComboBoxItem Tag="fra" Content="法语" />
-                        <ComboBoxItem Tag="de" Content="德语" />
-                        <ComboBoxItem Tag="spa" Content="西班牙语" />
-                        <ComboBoxItem Tag="ru" Content="俄语" />
-                    </ComboBox>
+                              SelectedValuePath="Code"
+                              DisplayMemberPath="Name"
+                              SelectionChanged="Language_OnChanged" />
                 </StackPanel>
                 <Border BorderBrush="#E3E8EF"
                         BorderThickness="1"

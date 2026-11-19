@@ -25,13 +25,13 @@ public sealed class TrayService : IDisposable
             Visible = true,
             ContextMenuStrip = _menu,
         };
-        // 左键单击即可打开主界面；用 MouseClick 过滤按钮，右键仍交给 ContextMenuStrip。
-        // 双击会额外触发两次单击，但 ShowMainWindow 幂等，只是重复激活，无副作用。
-        _icon.MouseClick += (_, args) =>
+        _icon.MouseClick += OpenFromTray;
+        _icon.MouseDoubleClick += OpenFromTray;
+
+        void OpenFromTray(object? sender, MouseEventArgs args)
         {
             if (args.Button == MouseButtons.Left) openMainWindow();
-        };
-        _icon.DoubleClick += (_, _) => openMainWindow();
+        }
     }
 
     public void Notify(string message) =>

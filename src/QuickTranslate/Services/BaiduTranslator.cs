@@ -40,7 +40,7 @@ public sealed class BaiduTranslator
 
     /// <summary>划词 / 截图 OCR 走这里：恒为「自动检测 → 设置页的目标语言」，不受主界面语种影响。</summary>
     public Task<string> TranslateAsync(string text, CancellationToken cancellationToken = default) =>
-        TranslateAsync(text, "auto", _config.TargetLanguage, cancellationToken);
+        TranslateAsync(text, TranslationLanguage.Auto, _config.TargetLanguage, cancellationToken);
 
     /// <summary>主界面手动翻译走这里，源语言与目标语言由界面传入。</summary>
     public async Task<string> TranslateAsync(
@@ -69,7 +69,7 @@ public sealed class BaiduTranslator
                 TranslationErrorCategory.Service);
         }
 
-        string source = string.IsNullOrWhiteSpace(from) ? "auto" : from;
+        string source = string.IsNullOrWhiteSpace(from) ? TranslationLanguage.Auto : from;
         string target = string.IsNullOrWhiteSpace(to) ? _config.TargetLanguage : to;
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -181,8 +181,7 @@ public sealed class BaiduTranslator
         {
             int length = char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])
                 ? 2 : 1;
-            string unit = text.Substring(i, length);
-            int unitBytes = Encoding.UTF8.GetByteCount(unit);
+            int unitBytes = Encoding.UTF8.GetByteCount(text.AsSpan(i, length));
 
             if (bytes + unitBytes > MaxQueryBytes && current.Length > 0)
             {
@@ -191,7 +190,7 @@ public sealed class BaiduTranslator
                 bytes = 0;
             }
 
-            current.Append(unit);
+            current.Append(text, i, length);
             bytes += unitBytes;
             i += length;
         }

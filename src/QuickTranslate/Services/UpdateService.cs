@@ -1,40 +1,29 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Text.Json;
 
 namespace QuickTranslate.Services;
 
 public enum UpdateStatus
 {
-    UpToDate,   // 已是最新版
-    Available,  // 远端有新版本
-    Failed,     // 检查失败，Message 是可直接展示的中文原因
-    Cancelled,  // 用户关窗取消了检查
+    UpToDate,
+    Available,
+    Failed,
 }
 
-/// <summary>
-/// 一次检查的结果。所有对外文案都是中文；底层异常只写日志，绝不把 ex.Message 交给界面。
-/// </summary>
 public sealed record UpdateCheckResult(
     UpdateStatus Status,
     string Message,
     Version CurrentVersion,
     Version? LatestVersion = null,
     string? ReleaseUrl = null,
-    string? Notes = null,
-    string? InstallerName = null,
-    bool CanOpenReleasePage = false);
+    string? Notes = null);
 
-/// <summary>
-/// 手动检查更新：只访问 GitHub 公开 Release API，不下载、不执行任何文件。
-/// 程序启动阶段不调用这里 —— 只有用户点「检查更新」时才联网。
-/// </summary>
 public static class UpdateService
 {
-    public const string Repository = "fu-roc/QuickTranslate";
-    public const string ApiUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
+    private const string Repository = "fu-roc/QuickTranslate";
+    private const string ApiUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
     public const string ReleasesPageUrl = $"https://github.com/{Repository}/releases/latest";
 
     private const int NotesMaxLines = 14;
@@ -42,13 +31,9 @@ public static class UpdateService
 
     private static readonly HttpClient Client = CreateClient();
 
-    /// <summary>程序集版本（csproj 的统一版本源），归一化为 4 段便于比较。</summary>
-    public static Version CurrentVersion =>
-        Normalize(Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(1, 0, 0, 0));
-
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        var client = new HttpClient();
         // GitHub API 要求 User-Agent，否则直接 403
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"QuickTranslate/{AppVersion.Display}");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
@@ -59,11 +44,13 @@ public static class UpdateService
 
     public static async Task<UpdateCheckResult> CheckAsync(CancellationToken token)
     {
-        Version current = CurrentVersion;
+        Version current = AppVersion.Value;
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
+        budget.CancelAfter(TimeSpan.FromSeconds(12));
         try
         {
             using var response = await Client
-                .GetAsync(ApiUrl, HttpCompletionOption.ResponseHeadersRead, token)
+                .GetAsync(ApiUrl, HttpCompletionOption.ResponseHeadersRead, budget.Token)
                 .ConfigureAwait(false);
 
             if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
@@ -77,15 +64,15 @@ public static class UpdateService
                     $"检查更新失败：GitHub 返回 {(int)response.StatusCode}，请稍后再试，或直接打开发布页面查看。");
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: token).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(budget.Token).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: budget.Token).ConfigureAwait(false);
             return ParseRelease(document.RootElement, current);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            return new UpdateCheckResult(UpdateStatus.Cancelled, string.Empty, current);
+            throw;
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
             return Failed(current, "检查更新超时：连接 GitHub 时间过长，请检查网络或代理后重试。");
         }
@@ -116,42 +103,36 @@ public static class UpdateService
             return Failed(current, "检查更新失败：GitHub 上的版本号格式无法识别，请直接打开发布页面查看。");
         }
 
-        latest = Normalize(latest);
-        string url = FirstNonEmpty(GetString(root, "html_url"), ReleasesPageUrl);
-        string notes = FormatNotes(GetString(root, "body"));
-        string? installer = FindInstallerName(root);
-        bool isDraft = GetBool(root, "draft");
-        bool isPrerelease = GetBool(root, "prerelease");
-
-        if (isDraft)
+        if (GetBool(root, "draft"))
         {
             return Failed(current, "检查更新失败：远端最新发布还是草稿，请直接打开发布页面查看。");
         }
-        if (isPrerelease)
+        if (GetBool(root, "prerelease"))
         {
             return Failed(current, "检查更新失败：远端最新发布是预发布版本，请直接打开发布页面查看。");
         }
 
+        string url = GetString(root, "html_url");
+        string notes = FormatNotes(GetString(root, "body"));
         if (latest.CompareTo(current) <= 0)
         {
             return new UpdateCheckResult(
                 UpdateStatus.UpToDate,
                 $"已是最新版本（当前 {Format(current)}）。",
-                current, latest, url, notes, installer,
-                CanOpenReleasePage: true);
+                current, latest, url, notes);
         }
 
         string message = $"发现新版本 {Format(latest)}，当前是 {Format(current)}。";
+        string? installer = FindInstallerName(root);
         if (installer is not null) message += $" 发布页里有系统级安装包 {installer}。";
 
         return new UpdateCheckResult(
             UpdateStatus.Available,
             message,
-            current, latest, url, notes, installer,
-            CanOpenReleasePage: true);
+            current, latest, url, notes);
     }
 
-    /// <summary>把 v1.1.0 / 1.1.0 / 1.1.0-beta.2 之类 tag 解析成版本；失败返回 false。</summary>
+    /// <summary>将发布标签中的版本号转换为四段版本。</summary>
     public static bool TryParseTag(string? tag, out Version version)
     {
         version = new Version(0, 0, 0, 0);
@@ -207,8 +188,7 @@ public static class UpdateService
     }
 
     private static UpdateCheckResult Failed(Version current, string message) =>
-        new(UpdateStatus.Failed, message, current, null, ReleasesPageUrl, null, null,
-            CanOpenReleasePage: true);
+        new(UpdateStatus.Failed, message, current);
 
     private static Version Normalize(Version version) =>
         new(version.Major, version.Minor, Math.Max(version.Build, 0), Math.Max(version.Revision, 0));
@@ -220,8 +200,8 @@ public static class UpdateService
 
         foreach (JsonElement asset in assets.EnumerateArray())
         {
-            string? name = GetString(asset, "name");
-            if (name is not null && name.Contains("setup", StringComparison.OrdinalIgnoreCase) &&
+            string name = GetString(asset, "name");
+            if (name.Contains("setup", StringComparison.OrdinalIgnoreCase) &&
                 name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 return name;
@@ -241,7 +221,4 @@ public static class UpdateService
         element.ValueKind == JsonValueKind.Object &&
         element.TryGetProperty(property, out JsonElement value) &&
         value.ValueKind == JsonValueKind.True;
-
-    private static string FirstNonEmpty(string first, string fallback) =>
-        string.IsNullOrWhiteSpace(first) ? fallback : first;
 }

@@ -15,7 +15,7 @@ public static class IdentifierNormalizer
 {
     private const int MaxLength = 4096;
 
-    public static bool ShouldNormalize(string? text)
+    private static bool ShouldNormalize(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         string s = text.Trim();

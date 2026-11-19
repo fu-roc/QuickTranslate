@@ -3,17 +3,12 @@ using System.Windows;
 using QuickTranslate.Models;
 using QuickTranslate.Services;
 using WpfComboBox = System.Windows.Controls.ComboBox;
-using WpfComboBoxItem = System.Windows.Controls.ComboBoxItem;
 using WpfKey = System.Windows.Input.Key;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfSelectionChangedEventArgs = System.Windows.Controls.SelectionChangedEventArgs;
 
 namespace QuickTranslate.Windows;
 
-/// <summary>
-/// 手动翻译的双栏主界面。源语言 / 目标语言是本窗口独立的偏好，只影响手动翻译；
-/// 划词与截图 OCR 恒用「自动检测 → 设置页目标语言」。翻译能力由 App 注入，关闭只隐藏。
-/// </summary>
 public partial class MainWindow : Window
 {
     private static readonly System.Windows.Media.SolidColorBrush MutedBrush = Brush("#6B7280");
@@ -31,30 +26,30 @@ public partial class MainWindow : Window
 
     private CancellationTokenSource? _cts;
     private bool _forceClose;
-    private bool _busy;
     private bool _loadingLanguage;
 
     public MainWindow(AppConfig config)
     {
         InitializeComponent();
+        SourceLanguageBox.ItemsSource = TranslationLanguage.Sources;
+        TargetLanguageBox.ItemsSource = TranslationLanguage.Targets;
         ApplyConfig(config);
         UpdateCount();
         Loaded += (_, _) => SourceBox.Focus();
     }
 
-    /// <summary>
-    /// 构造时与设置页保存后由 App 调用。只同步主界面自己的偏好；
-    /// 目标语言偏好为空（用户还没在主界面选过）时跟随设置页，之后互不干扰。
-    /// </summary>
     public void ApplyConfig(AppConfig config)
     {
+        var previousLanguages = (SelectedFrom, SelectedTo);
         _loadingLanguage = true;
         try
         {
-            SelectLanguage(SourceLanguageBox, config.MainWindowSourceLanguage, "auto");
-            SelectLanguage(TargetLanguageBox, EffectiveTarget(config), "zh");
+            SelectLanguage(SourceLanguageBox, config.MainWindowSourceLanguage, TranslationLanguage.Auto);
+            SelectLanguage(TargetLanguageBox, EffectiveTarget(config), TranslationLanguage.SimplifiedChinese);
         }
         finally { _loadingLanguage = false; }
+
+        if ((SelectedFrom, SelectedTo) != previousLanguages) ResetTranslationForLanguageChange();
     }
 
     private static string EffectiveTarget(AppConfig config) =>
@@ -62,45 +57,35 @@ public partial class MainWindow : Window
             ? config.TargetLanguage
             : config.MainWindowTargetLanguage;
 
-    /// <summary>
-    /// 手改过 config.json 时值可能不在下拉里（含大小写不一致），逐级回退到安全项，
-    /// 别让 SelectedValue 变成 null 导致翻译时拿到未知语种。
-    /// </summary>
     private static void SelectLanguage(WpfComboBox box, string code, string fallback)
     {
-        string? match = FindTag(box, code) ?? FindTag(box, fallback);
-        box.SelectedValue = match
-            ?? (box.Items[0] as WpfComboBoxItem)?.Tag as string
-            ?? string.Empty;
+        box.SelectedValue = box.Items.Cast<TranslationLanguage>()
+            .FirstOrDefault(language => string.Equals(language.Code, code, StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? fallback;
     }
 
-    private static string? FindTag(WpfComboBox box, string code) =>
-        box.Items.OfType<WpfComboBoxItem>()
-            .Select(item => item.Tag as string)
-            .FirstOrDefault(tag => string.Equals(tag, code, StringComparison.OrdinalIgnoreCase));
-
-    private string SelectedFrom => SourceLanguageBox.SelectedValue as string ?? "auto";
-    private string SelectedTo => TargetLanguageBox.SelectedValue as string ?? "zh";
+    private string SelectedFrom => SourceLanguageBox.SelectedValue as string ?? TranslationLanguage.Auto;
+    private string SelectedTo => TargetLanguageBox.SelectedValue as string ?? TranslationLanguage.SimplifiedChinese;
 
     private void Language_OnChanged(object sender, WpfSelectionChangedEventArgs e)
     {
-        // 初始化下拉也会触发 SelectionChanged，不能当成用户操作去写盘
         if (_loadingLanguage || !IsLoaded) return;
 
-        // 旧语种的译文与在途请求都不该留下，切完语言必须重新翻译
-        CancelTranslate();
-        if (!string.IsNullOrEmpty(ResultBox.Text))
-        {
-            ResultBox.Text = string.Empty;
-            CopyButton.IsEnabled = false;
-            SetStatus("语言已切换，点「翻译」重新翻译。", isError: false);
-        }
-
+        ResetTranslationForLanguageChange();
         string? failure = SaveLanguage?.Invoke(SelectedFrom, SelectedTo);
         if (failure is not null) SetStatus(failure, isError: true);
     }
 
-    public void HideWindow()
+    private void ResetTranslationForLanguageChange()
+    {
+        if (_cts is null && ResultBox.Text.Length == 0) return;
+        CancelTranslate();
+        ResultBox.Text = string.Empty;
+        CopyButton.IsEnabled = false;
+        SetStatus("语言已切换，点「翻译」重新翻译。", isError: false);
+    }
+
+    private void HideWindow()
     {
         CancelTranslate();
         if (IsVisible) Hide();
@@ -118,7 +103,7 @@ public partial class MainWindow : Window
 
     private async Task RunTranslateAsync()
     {
-        if (_busy) return;
+        if (_cts is not null) return;
 
         string text = SourceBox.Text;
         if (string.IsNullOrWhiteSpace(text))
@@ -136,17 +121,15 @@ public partial class MainWindow : Window
         string from = SelectedFrom;
         string to = SelectedTo;
         // 百度 58001：同语种方向不支持，前端直接拦掉，省一次请求与配额
-        if (!string.Equals(from, "auto", StringComparison.OrdinalIgnoreCase) &&
+        if (!string.Equals(from, TranslationLanguage.Auto, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(from, to, StringComparison.OrdinalIgnoreCase))
         {
             SetStatus("源语言和目标语言相同，请换一个再翻译。", isError: true);
             return;
         }
 
-        CancelTranslate();
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         _cts = cts;
-        _busy = true;
         SetBusy(true);
         ResultBox.Text = string.Empty;
         SetStatus("正在翻译…", isError: false);
@@ -154,16 +137,12 @@ public partial class MainWindow : Window
         try
         {
             string translated = await TranslateAsync(text, from, to, cts.Token);
-            // 关窗 / 清空 / 切换语言会取消在途请求，迟到的结果不许覆盖当前界面
-            if (cts.IsCancellationRequested || !ReferenceEquals(_cts, cts)) return;
+            if (cts.IsCancellationRequested) return;
             ResultBox.Text = translated;
             CopyButton.IsEnabled = true;
             SetStatus($"翻译完成 · {DateTime.Now:HH:mm:ss}", isError: false);
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
-        {
-            // 用户主动取消，不把取消当成失败打扰用户
-        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
         catch (Exception ex)
         {
             if (!ReferenceEquals(_cts, cts)) return;
@@ -178,8 +157,6 @@ public partial class MainWindow : Window
             if (ReferenceEquals(_cts, cts))
             {
                 _cts = null;
-                cts.Dispose();
-                _busy = false;
                 SetBusy(false);
             }
         }
@@ -264,12 +241,10 @@ public partial class MainWindow : Window
     {
         var cts = _cts;
         _cts = null;
-        _busy = false;
         SetBusy(false);
         if (cts is null) return;
         try { cts.Cancel(); }
         catch (Exception ex) { LogService.Warn("主窗口：取消在途翻译失败", ex); }
-        finally { cts.Dispose(); }
     }
 
     private static System.Windows.Media.SolidColorBrush Brush(string hex)

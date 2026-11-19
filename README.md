@@ -26,7 +26,7 @@
 
 **一个单文件 exe，不开浏览器内核，不常驻窗口，不后台联网，[MIT 开源](LICENSE)。**
 
-> **开始之前**：翻译走百度翻译开放平台，需要填一次你自己的 APPID / 密钥（个人认证后有免费额度，日常划词基本用不完）。这是一次性配置，不是注册软件账号，也不用在软件里登录。
+> **首次使用在线翻译**：请在设置里填写百度翻译开放平台的 APPID 和密钥。内置英汉词典可直接离线使用。
 
 ## 为什么用它
 
@@ -54,7 +54,7 @@
 
 | 能力 | 怎么用 | 说明 |
 | --- | --- | --- |
-| 划词翻译 | 选中文字 → `Alt+T` | 模拟 `Ctrl+C` 取词，译文浮现在光标旁，**不抢走你正在打字的焦点** |
+| 划词翻译 | 选中文字 → `Alt+T` | 模拟 `Ctrl+C` 取词，结果浮现在光标旁并保留当前输入焦点。目标为简体中文时，英文单词优先离线查词 |
 | 截图 OCR | `Alt+S` → 框选屏幕 | `Windows.Media.Ocr` 本地识别，图片全程只在内存里流转，适合不能复制的界面 |
 | 双栏主界面 | 单击托盘图标 | 手动输入翻译，源语言 / 译文语言分别可选，`Ctrl+Enter` 触发，关闭只隐藏 |
 | 悬浮结果窗 | 自动出现 | 点击外部即关闭；点译文即复制；出错给中文原因和「重试 / 打开设置」，不甩英文异常 |
@@ -73,7 +73,9 @@
 
 规则收得很紧：只有整串无空白、且确实存在 `_` / `-` 或驼峰边界才改写；普通英文句子、中文、URL、文件路径、代码行一律原样发送，界面上显示的原文也不变。划词、OCR、主界面三条链路都生效。
 
-**隐私与本地数据**：密钥用 Windows DPAPI（当前账户）加密后存进 `%APPDATA%\QuickTranslate\config.json`，换账户或换机器无法解密；配置原子写盘，损坏时先备份再提示。日志只记异常与关键状态，**不记翻译原文 / APPID / 密钥**，超过 1 MB 自动轮转。翻译文本本身会发送给百度 API（这是翻译服务的性质），除此之外程序不上传任何东西。
+划词查到英文单词时，悬浮窗会列出词典释义，点击一行即可复制。词库未命中、选中短语或句子，或目标为其他语言时，使用百度通用翻译。
+
+**隐私与本地数据**：密钥用 Windows DPAPI（当前账户）加密后存进 `%APPDATA%\QuickTranslate\config.json`，换账户或换机器无法解密；配置原子写盘，损坏时先备份再提示。日志只记异常与关键状态，**不记翻译原文 / APPID / 密钥**，超过 1 MB 自动轮转。使用百度翻译时，待翻译文本会发送给百度 API。词典查询在本机完成。
 
 ## 下载
 
@@ -81,12 +83,12 @@
 
 | 产物 | 适合谁 | 说明 |
 | --- | --- | --- |
-| `...-framework-dependent.zip` 便携版（约 6 MB） | 想绿色免安装 | 解压到固定目录，双击单文件 exe 即用；不写安装信息、不建卸载入口，升级就是替换 exe |
-| `...-win-x64-setup-*.exe` 安装包（约 5.5 MB） | 想要开始菜单和卸载入口 | 中文向导，默认装到 `C:\Program Files\QuickTranslate`，**系统级安装，双击时需 UAC 管理员授权**；可在「设置 → 应用」卸载，卸载不删配置 |
+| `...-framework-dependent.zip` 便携版 | 想绿色免安装 | 解压到固定目录，双击单文件 exe 即用；不写安装信息、不建卸载入口，升级就是替换 exe |
+| `...-win-x64-setup-*.exe` 安装包 | 想要开始菜单和卸载入口 | 中文向导，默认装到 `C:\Program Files\QuickTranslate`，**系统级安装，双击时需 UAC 管理员授权**；可在「设置 → 应用」卸载，卸载不删配置 |
 
 两者都依赖 .NET 10 Desktop Runtime。注意区分：**安装过程**需要管理员权限，**装好的程序**仍以普通权限（`asInvoker`）常驻托盘，不会请求提权。安装包不会创建开机自启项，需要请在设置页勾选。
 
-覆盖升级直接用新版安装包再装一次即可，**不用先卸载**，也**不用手动退出**正在运行的托盘程序 —— 安装包会在复制文件前自动结束旧实例，装完可勾选「运行 QuickTranslate」重新拉起。
+覆盖安装时，安装程序会在复制文件前结束正在运行的托盘实例。安装完成后可勾选「运行 QuickTranslate」。
 
 ## 常见问题
 
@@ -108,9 +110,7 @@
 
 ## 已知限制
 
-这些是刻意的设计取舍，不是 bug，完整说明见[技术细节](#开发者与维护者)：
-
-- 只支持 Windows；翻译需联网且需自备百度 API 密钥
+- 支持 Windows。在线翻译需要网络及百度翻译 API 密钥。
 - 取词依赖模拟 `Ctrl+C`，不恢复原剪贴板内容；少数禁止复制的场景要用截图 OCR
 - 悬浮结果窗为了「不抢焦点」收不到键盘消息，因此不支持 `Esc` 关闭；点一下窗口外的任意位置，或再按一次同一个快捷键即可关闭它，窗口本身不会自动消失
 - 未做代码签名，首次运行可能被安全软件拦；日志按大小轮转，磁盘占用上限约 2 MB
@@ -139,11 +139,9 @@
 }
 ```
 
-`TargetLanguage` 是划词 / 截图 OCR 的目标语言；`MainWindowSourceLanguage` / `MainWindowTargetLanguage` 是主界面**独立**记住的语种偏好，后者留空表示还没在主界面单独选过、暂时跟随 `TargetLanguage`。两套语言互不影响：设置页保存时会显式带上这两个字段，不会把记住的语种冲掉。源语言和目标语言选成同一个会在前端拦住，避免百度 58001 白跑一次请求。
+`TargetLanguage` 用于划词和截图 OCR。`MainWindowSourceLanguage` 和 `MainWindowTargetLanguage` 用于手动翻译，后者留空时跟随 `TargetLanguage`。
 
-`Secret` 用 DPAPI（CurrentUser）加密后落盘，磁盘上不是明文；换到别的 Windows 账户/机器后无法解密，程序会保留原文件、备份 `config.json.bak` 并提示重新填写，不会静默清空。旧版本留下的明文配置会在首次启动时一次性加密迁移。写盘采用「临时文件 + 原子替换」，写一半断电/崩溃不会留下截断的 JSON。
-
-开机自启的状态**不在这个文件里**，见下节。
+`Secret` 通过 Windows DPAPI（CurrentUser）加密保存。读取明文密钥时，程序会尝试加密并保存。配置无法解析或解密时会备份为 `config.json.bak` 并提示重新填写。配置通过同目录临时文件原子替换。
 
 </details>
 
@@ -154,20 +152,19 @@
 - **主键**：`A-Z`、`0-9`、`F1-F24`、方向键、`Space`、`Tab`、`Enter`、`Esc`、`Backspace`、`Insert`、`Delete`、`Home`、`End`、`PageUp`、`PageDown`、`PrintScreen`、`NumPad0-9`，以及 `;` `=` `,` `-` `.` `/` `[` `]` `'`、反斜杠、反引号等符号键（`+` 用作分隔符，不能当主键）。
 - **写法示例**：`Alt+T`、`Ctrl+Shift+F5`、`Win+Alt+D`、`Ctrl+Space`、`Ctrl+;`。大小写、修饰键顺序、别名不影响识别。
 - **录制**：点「录制」后直接按键，程序按 `Ctrl → Alt → Shift → Win` 的固定顺序规范化后写回输入框；只按下修饰键时会继续等待主键，`Esc` 取消，`Backspace` 清空。
-- **保存时校验**：格式不合法、两个快捷键重复、被系统保留的组合（`Ctrl+Alt+Del`、`Win+L`、`Win+Shift+S`、`Alt+F4` 等）、以及与内部取词冲突的 `Ctrl+C`，都会在设置窗口内给出中文原因。「保存」先实测热键能否注册，再原子写盘、最后更新自启项，任一步失败都不留下新状态。
-- 设置窗口打开期间旧热键临时注销，避免录入的组合被旧热键抢走；**关闭窗口后由唯一注册点按当前配置重新注册**，不会出现「两个键全失灵」。
+- **保存时校验**：检查格式、重复组合和系统占用情况。`Ctrl+C` 专用于取词。保存设置后应用自启选项，更新自启失败时尝试回滚配置。
+- 设置窗口打开时暂停全局热键，关闭后按生效的设置注册。
 
 </details>
 
 <details>
-<summary><strong>开机自启的实现与 Defender 行为检测</strong></summary>
+<summary><strong>开机自启</strong></summary>
 
 设置页勾选后写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下名为 `QuickTranslate` 的字符串值，指向当前 exe（路径带引号）。只写 HKCU，不需要管理员权限，不创建计划任务。
 
-- 注册表项是唯一状态来源，不写进 `config.json`；在任务管理器「启动应用」里禁用后，设置页会如实显示未启用。
-- **启动时只读、不自动改写**：程序移动后只给一条托盘提示。故意不在启动阶段写注册表 —— 未签名 exe 自动写自启项会触发 Defender 的 `Behavior:Win32/Persistence.A!ml` 行为检测并把整个程序隔离。要修正旧路径，打开设置点一次「保存」即可（开关不必改动）；`Apply` 幂等，值已正确时一个字节都不写。
+- 设置页根据当前用户的 Run 项显示自启状态。
+- 启动时检查路径并提示问题。移动程序后，在设置页保存一次可更新启动路径。
 - 若该 Run 值指向其他程序，程序不会覆盖或删除；归属判断除文件名外还核对文件版本信息里的产品名。
-- 自启指向的是当前运行的那个 exe：从 `bin/Debug/...` 启动就指向那里，清理构建目录会让它失效。长期使用建议先 `dotnet publish` 到固定目录，从那里运行一次再到设置里点「保存」。
 
 </details>
 
@@ -188,12 +185,12 @@
 <details>
 <summary><strong>取词、OCR 与悬浮窗的实现细节</strong></summary>
 
-- **不等用户松开热键**：浏览器在 `Alt` 的 keyup 后会激活菜单栏、把页面选区变成非活动状态（蓝色高亮变灰），那时 `Ctrl+C` 已经复制不到页面选区 —— 这正是「马上松 Alt 报未检测到选中文本、一直按住 Alt 反而正常」的原因。热键到达瞬间先补发修饰键 keyup 清掉残留 `Alt`（否则注入会变成 `Alt+Ctrl+C`），约 20ms 后立即注入 `Ctrl+C`，抢在焦点转移前完成复制。`RegisterHotKey` 会截获 keydown，前台窗口偶尔仍吞掉首次 `Ctrl/C` keydown，所以首轮剪贴板无变化时会清一次修饰键并补发第二次。
+- **取词**：收到热键后释放修饰键，再向前台窗口发送 `Ctrl+C`。剪贴板没有更新时再尝试一次。
 - 取词失败在 `%LOCALAPPDATA%\QuickTranslate\app.log` 留一行诊断（注入是否成功、剪贴板序号是否变化、前后文本长度），**不记录原文**；日志按 1 MB 轮转成 `app.log.old`，磁盘上限约 2 MB。
 - **截图 OCR**：只覆盖光标所在那一块屏幕，不支持跨屏拖拽；选区用 Win32 物理像素坐标确定，不受多屏不同 DPI 缩放影响（覆盖层在副屏的视觉定位可能有偏移）。截图经 `InMemoryRandomAccessStream` 全内存流转，不往临时目录写 PNG；超大图片按 `OcrEngine.MaxImageDimension` 自动缩放。无对应系统语言包时会提示去系统设置添加。
-- **OCR 准确率**：`Windows.Media.Ocr` 对 11~12px 的小字几乎是废的（同一段文字实测识别率 0%），框选到浏览器、IDE 里的正文基本都落在这个区间 —— 这是「截图 OCR 不准」的主导原因，而不是语言包或引擎选错。现在会先估字高（Otsu 二值化 + 行墨迹带中位数），按估算结果把选区放大到约 24px 字高再交给引擎（1~4 倍，另有像素上限防止整屏框选吃满内存）；识别结果不足 12 个字时换一个倍数补一次。实测 12 组样本平均准确率从 41% 提到 93%。另外不再直接用 `OcrResult.Text`（它会把每个词用空格串起来，中文会变成「请 在 设 置 中」），改为按每个词的包围盒重建文本：汉字之间的空隙阈值放宽到 0.45、西文词间用 0.18，中英混排不会粘成「点击Download按钮」。深色背景不需要反色或转灰度，实测没有收益，故不做。
-- **悬浮窗不抢焦点**：`ShowActivated=False`，不调用 `Activate()`。窗口从不激活 → `Deactivated` 不触发、窗口外点击也收不到 WPF 鼠标事件，所以用**仅在显示期间运行的 60ms 轮询**（读全局左键状态 + 判断光标是否落在窗口内）实现「点击别处关闭」：不装全局钩子、不吞掉那次点击，只有观察到完整「按下 → 抬起」周期才判定，刚拖完选区按热键不会被自己松开的那一下关掉。窗口不设任何超时，也不会因为鼠标移开而消失。窗口从不激活、收不到键盘消息，所以关闭方式只有两种：点窗口外，或再按一次热键。
-- **主界面相反**：它是你主动点开的常规窗口，需要打字、按 `Ctrl+Enter` 和 `Esc`，所以用 `Show()` + `Activate()`，不做「点击别处关闭」。两种窗口焦点策略不同是刻意设计；划词 / OCR 热键不依赖主界面是否可见。
+- **OCR 预处理**：估计字高后缩放截图，对小字以约 24 像素为目标。识别结果过短时尝试另一倍率。用词的坐标重建空格与换行。
+- **悬浮窗**：以 `ShowActivated=False` 显示，通过定时读取鼠标状态检测窗口外的完整点击。
+- **主窗口**：主动打开时激活。按 `Esc` 隐藏，按 `Ctrl+Enter` 翻译。
 - **长文本按字节分段**：百度单次 `q` 上限 6000 字节（汉字约 2000 个），按 UTF-8 字节切段并合并译文，最多 8 段，超长明确提示。
 - 程序以 `asInvoker` 运行，不请求管理员权限；只有安装/卸载过程需要 UAC 提权。
 
@@ -209,6 +206,8 @@ dotnet run --project src/QuickTranslate/QuickTranslate.csproj -c Debug
 dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --self-contained false
 ```
 
+内置英汉词库取自 ECDICT，提取词频靠前的 50,000 个单词及中文释义。更新数据时，运行 `python tools/build-dictionary.py <ecdict.csv>`。[词库源文件](https://github.com/skywind3000/ECDICT/blob/39cfb9672c0906b63569e0453c2e6abfb9ab182a/ecdict.csv) · [随程序打包的 MIT 许可](https://github.com/skywind3000/ECDICT/blob/39cfb9672c0906b63569e0453c2e6abfb9ab182a/LICENSE)
+
 三种发布形态（Release / win-x64 实测）：
 
 | 形态 | 关键参数 | 产物 | 体积 | 目标机要求 |
@@ -222,15 +221,14 @@ dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --
 生成产物（PowerShell，项目根目录）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 zip，约 6 MB 压缩包
+powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 ZIP
 powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，目标机零依赖
 powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate\QuickTranslate.exe   # 安装包，-Exe 必填
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe -Version 1.1.0
 ```
 
-安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)（`ISCC.exe`），脚本依次查 `-ISCC`、PATH、常见安装目录、便携目录。`packaging/setup.iss` 是安装定义（`PrivilegesRequired=admin`、`{autopf}`、`{commonprograms}` / `{commondesktop}`，`runasoriginaluser` 避免程序继承管理员令牌，复制文件前自动结束运行实例、不用 `AppMutex` 弹窗也不用 `CloseApplications` 询问页）；`packaging/ChineseSimplified.isl` 是官方简体中文语言包。注意 Inno Setup 的 `Setup.exe` 自身 manifest 仍是 `asInvoker`，提权靠内部 `runas` 重启，不能用 manifest 判断安装级别。
+安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)。脚本从 PATH 或 Program Files 查找 `ISCC.exe`，也可用 `-ISCC` 指定。安装定义和简体中文语言文件在 `packaging/`。
 
-产物在 `artifacts/`（已 gitignore），文件名带时间戳，每次生成新文件、不覆盖不删除。zip 内是单文件 exe 加本说明；Release 保留 portable PDB，符号文件单独放在 `artifacts/` 供排障，不塞进用户下载的 zip。程序集版本、设置页版本、安装包版本统一取自 `QuickTranslate.csproj` 的 `<Version>`，`build-installer.ps1` 自动解析。
+带时间戳的产物位于 `artifacts/`。便携 ZIP 内含 EXE 和本说明，调试符号单独输出。默认发布版本取自 `QuickTranslate.csproj` 的 `<Version>`。
 
 - 便携版解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次、到设置里点一次「保存」，自启路径才会指向它。手动替换 exe 升级前需先从托盘「退出」，否则文件被占用。
 - 安装包默认装到固定路径，无「移动目录导致自启失效」问题；安装/卸载需 UAC，卸载项写 HKLM，不写任何自启项。安装 / 卸载时若程序正在运行，会在复制文件前自动结束它，不弹「请关闭所有实例」或「关闭应用」询问页；向导里点「取消」则完全不动运行中的软件。交互安装结束时默认勾选的「运行 QuickTranslate」会重新拉起新版（静默安装不自动启动）。
@@ -243,76 +241,16 @@ powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\
 <details>
 <summary><strong>被 Windows Defender / SmartScreen 拦截时的处置</strong></summary>
 
-从未签名的 zip 或 GitHub 下载 exe，首次运行可能弹出「无法成功完成操作，因为文件包含病毒或潜在的垃圾软件」或「Windows 已保护你的电脑」，文件甚至会被直接删掉。**这不是病毒，是误报**：程序没有代码签名，Defender 对刚编译、全网没有下载记录的 exe 没有信誉数据。
-
-本项目实测触发过 `Behavior:Win32/Persistence.A!ml`（严重级别 5，**行为型**「持久化」检测）：早期版本会在程序启动时自动改写 `HKCU\...\Run` 自启项，正好符合恶意软件驻留特征，Defender 因此隔离删除了 exe。**代码侧已修**：启动阶段只读检查、绝不写注册表；只有你在设置页点「保存」时才可能写一次，而且 `Apply` 幂等，值已正确时连这一次也不写。
-
-如果仍被拦截，按这个顺序处理：
-
-1. `Windows 安全中心 → 病毒和威胁防护 → 保护历史记录`，找到对应时间的条目，展开后点「操作 → 在设备上允许 / 还原」。
-2. **先把 zip 完整解压到一个固定目录**（例如 `%LOCALAPPDATA%\QuickTranslate\`）再双击，不要直接在压缩软件里双击 zip 内的 exe —— 那会在系统临时目录解压运行，更可疑。
-3. 给这个固定目录加一条范围最小的防病毒排除项（需管理员权限）：
-
-   ```powershell
-   Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\QuickTranslate"
-   ```
-
-   图形界面：`Windows 安全中心 → 病毒和威胁防护 → 管理设置 → 排除项 → 添加文件夹`。
-4. 如果只是 SmartScreen 的「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」，一次放行后不再提示。
-
-根治办法是代码签名（OV / EV 证书，需购买），或提交微软误报申诉：<https://www.microsoft.com/en-us/wdsi/filesubmission>。本项目自用、不做正式分发，因此没有签名。
-
-> 排除项等于让 Defender 不再扫描那个目录，请只对确认是自己构建的程序目录使用，不要对整个项目根目录、`Downloads` 或用户目录加白。
+构建产物未经代码签名，首次运行可能触发 Windows 安全软件提示。可核对文件来源，或将疑似误报的文件提交微软复核。[微软文件提交](https://www.microsoft.com/en-us/wdsi/filesubmission)
 
 </details>
 
 <details>
 <summary><strong>目录结构</strong></summary>
 
-```
-QuickTranslate/
-├── QuickTranslate.slnx
-├── README.md
-├── LICENSE                       MIT 许可
-├── .gitignore
-├── publish.ps1                  便携版 zip 发布脚本（保留 portable PDB）
-├── build-installer.ps1           系统级 Inno Setup 安装包生成脚本（版本取自 csproj）
-├── packaging/
-│   ├── setup.iss                 系统级安装定义（无自启项，中文向导）
-│   └── ChineseSimplified.isl     Inno Setup 官方简体中文语言包
-├── design/tray-icon/             图标设计源：设计稿 + 16/20/24/32/48/256 分尺寸 PNG
-├── artifacts/                   构建产物（gitignore，不进仓库）
-└── src/QuickTranslate/
-    ├── App.xaml(.cs)              启动编排、全局异常钩子、链路调度与取消、配置应用、窗口入口
-    ├── app.manifest               PerMonitorV2 高 DPI 声明
-    ├── QuickTranslate.csproj      单一版本来源（Version / AssemblyVersion / Product）
-    ├── Assets/QuickTranslate.ico  应用与托盘图标（6 帧 32bpp ICO）
-    ├── Models/AppConfig.cs        配置模型
-    ├── Native/
-    │   ├── NativeMethods.cs       RegisterHotKey、SendInput、DPI、光标坐标
-    │   └── HotkeyCodec.cs         快捷键编解码、键表、录制与保留组合校验
-    ├── Services/
-    │   ├── ConfigService.cs       原子写盘、损坏备份、DPAPI 密钥加密
-    │   ├── LogService.cs          轻量文件日志
-    │   ├── AppVersion.cs          程序集版本显示
-    │   ├── ErrorMapper.cs         底层异常 → 中文原因 + 建议动作
-    │   ├── TranslationException.cs 错误分类（配置/网络/服务）
-    │   ├── HotkeyService.cs       全局热键注册/校验与分发
-    │   ├── ClipboardService.cs    模拟 Ctrl+C、剪贴板读取与复制（返回是否成功）
-    │   ├── BaiduTranslator.cs     签名、按 UTF-8 字节分段、错误码中文化
-    │   ├── IdentifierNormalizer.cs 下划线/驼峰标识符 → 空格分隔自然语言
-    │   ├── ScreenCaptureService.cs 物理像素截图（裁剪到虚拟桌面）
-    │   ├── OcrService.cs          全内存 Windows.Media.Ocr 识别
-    │   ├── AutoStartService.cs    HKCU Run 开机自启（启动只读校验、仅显式保存时写入）
-    │   ├── UpdateService.cs       GitHub Release 版本检查（仅手动触发、失败中文化）
-    │   └── TrayService.cs         系统托盘（左键单击 / 双击 / 右键菜单）
-    └── Windows/
-        ├── MainWindow.xaml        双栏手动翻译主界面
-        ├── ResultWindow.xaml      光标旁悬浮结果窗（不抢焦点、点击外部关闭）
-        ├── SelectionOverlayWindow.xaml  截图框选层
-        ├── SettingsWindow.xaml    5 项配置 + 开机自启 + 快捷键录制/恢复默认 + 检查更新
-        └── UpdateWindow.xaml      检查更新结果窗
-```
+- `src/QuickTranslate/` 是 WPF 应用，包含窗口、服务、Windows 原生接口和嵌入资源。
+- `packaging/` 和根目录的 PowerShell 脚本用于发布便携版和构建安装包。
+- `tools/build-dictionary.py` 生成内置英汉词库，`design/tray-icon/` 存放图标设计源文件。
 
 </details>
 

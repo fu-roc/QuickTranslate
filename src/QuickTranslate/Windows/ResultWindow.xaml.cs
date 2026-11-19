@@ -6,6 +6,7 @@ using QuickTranslate.Native;
 using QuickTranslate.Services;
 using Color = System.Windows.Media.Color;
 using Cursors = System.Windows.Input.Cursors;
+using Button = System.Windows.Controls.Button;
 
 namespace QuickTranslate.Windows;
 
@@ -33,9 +34,7 @@ public partial class ResultWindow : Window
     {
         InitializeComponent();
 
-        // 不抢前台焦点：ShowActivated=False + 不调用 Activate()。窗口从不激活，
-        // Deactivated 不会触发，窗口外的点击也收不到 WPF 鼠标事件；用显示期轮询实现
-        // 「点击别处关闭」，不装任何全局钩子。窗口不会自己消失，也不再随鼠标移开收起。
+        // 未激活的窗口通过轮询检测外部点击。
         _presenceTimer.Tick += OnPresenceTick;
 
         Closing += (_, e) =>
@@ -45,8 +44,6 @@ public partial class ResultWindow : Window
             HideWindow();
         };
     }
-
-    public bool IsShowing => IsVisible;
 
     public void HideWindow()
     {
@@ -65,6 +62,7 @@ public partial class ResultWindow : Window
 
     public void ShowLoading(string message)
     {
+        SetDefinitionLines(null);
         HeaderText.Text = "QuickTranslate";
         SourceText.Text = string.Empty;
         ResultText.Text = message;
@@ -78,6 +76,7 @@ public partial class ResultWindow : Window
 
     public void ShowResult(string source, string translated)
     {
+        SetDefinitionLines(null);
         HeaderText.Text = "译文";
         SourceText.Text = source.Replace('\r', ' ').Replace('\n', ' ');
         ResultText.Text = translated;
@@ -89,9 +88,20 @@ public partial class ResultWindow : Window
         ShowNearCursor();
     }
 
-    /// <summary>switchAction 为 null 时不显示按钮，配置/账户类错误不再误导用户去切换链路。</summary>
+    public void ShowDefinitions(string source, IReadOnlyList<string> definitions)
+    {
+        HeaderText.Text = "词典释义";
+        SourceText.Text = source.Replace('\r', ' ').Replace('\n', ' ');
+        SetDefinitionLines(definitions);
+        SetAction(null, null);
+        HintText.Text = "点击释义行复制 · 点击别处关闭";
+        _copyText = null;
+        ShowNearCursor();
+    }
+
     public void ShowError(string message, string? switchLabel = null, Action? switchAction = null)
     {
+        SetDefinitionLines(null);
         HeaderText.Text = "出错了";
         SourceText.Text = string.Empty;
         ResultText.Text = message;
@@ -101,6 +111,14 @@ public partial class ResultWindow : Window
         HintText.Text = "修好后重新按快捷键 · 点击别处关闭";
         _copyText = null;
         ShowNearCursor();
+    }
+
+    private void SetDefinitionLines(IReadOnlyList<string>? definitions)
+    {
+        DefinitionItems.ItemsSource = definitions;
+        DefinitionsScroll.Visibility = definitions is null ? Visibility.Collapsed : Visibility.Visible;
+        ResultBorder.Visibility = definitions is null ? Visibility.Visible : Visibility.Collapsed;
+        if (definitions is not null) DefinitionsScroll.ScrollToTop();
     }
 
     private void SetAction(string? label, Action? action)
@@ -132,8 +150,7 @@ public partial class ResultWindow : Window
 
         bool inside = IsCursorInsideWindow();
 
-        // 唯一的关闭条件：完整的「按下 → 抬起」落在窗口外。
-        // 窗口不会自己消失，也不会因为鼠标移开就收起。
+        // 只处理悬浮窗出现后的完整点击。
         bool down = NativeMethods.IsLeftButtonDown();
         if (!_lButtonWasDown && down) _clickArmed = true;
         if (_clickArmed && _lButtonWasDown && !down)
@@ -199,7 +216,6 @@ public partial class ResultWindow : Window
         }
         else
         {
-            // 保留 _copyText，用户可以再点一次重试，而不是被一句假「已复制」骗过去
             HintText.Text = "复制失败：剪贴板被其他程序占用，请再点一次译文重试";
         }
     }
@@ -209,5 +225,13 @@ public partial class ResultWindow : Window
         var action = _switchAction;
         HideWindow();
         action?.Invoke();
+    }
+
+    private void DefinitionButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: string definition }) return;
+        HintText.Text = ClipboardService.Copy(definition)
+            ? "已复制释义 · 点击别处关闭"
+            : "复制失败：剪贴板被其他程序占用，请再点一次释义重试";
     }
 }

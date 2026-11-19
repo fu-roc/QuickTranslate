@@ -1,31 +1,13 @@
-; QuickTranslate installer definition for Inno Setup 6.5+
-; Build via build-installer.ps1 (passes /DQtExe, /DQtVersion, /DQtStamp, /O).
-;
-; Machine-wide (system-level) install: requires elevation, installs to
-; Program Files, creates all-users shortcuts and an HKLM uninstall entry.
-;
-; IMPORTANT: this installer deliberately does NOT create any autostart entry
-; (no HKCU\...\Run value, no Startup-folder shortcut). An unsigned freshly
-; built program writing a persistence entry triggers Windows Defender's
-; Behavior:Win32/Persistence.A!ml heuristic, which quarantines the exe.
-; Autostart is offered by the application's own Settings page instead.
-;
-; [Run] uses runasoriginaluser so the app does NOT inherit the installer's
-; elevated token: it must stay a normal asInvoker tray process.
-;
-; Upgrades are unattended: the running tray instance is closed automatically
-; right before files are copied (see [Code]). No AppMutex prompt and no Restart
-; Manager "close applications" wizard page are shown.
+; Machine-wide installer built by build-installer.ps1 with Inno Setup 6.5+.
 
 #ifndef QtExe
   #error QtExe must point at the published QuickTranslate.exe (use build-installer.ps1)
 #endif
 #ifndef QtVersion
-  ; 直接跑 ISCC 时的兜底版本；正常构建由 build-installer.ps1 从 csproj 传入
-  #define QtVersion "1.1.2"
+  #error QtVersion must be set by build-installer.ps1
 #endif
 #ifndef QtStamp
-  #define QtStamp "dev"
+  #error QtStamp must be set by build-installer.ps1
 #endif
 
 #define MyAppName "QuickTranslate"
@@ -55,14 +37,9 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName} {#QtVersion}
-; Deliberately NO AppMutex: it shows "please close all instances" at startup,
-; and even /VERYSILENT does not suppress that dialog. The running instance is
-; closed by [Code] instead, only once the user actually starts the install.
-; CloseApplications=no because yes/force both pop a "close applications" page
-; on the Preparing to Install wizard; there is nothing left to close by then.
+; The install step closes the tray process before copying files.
 CloseApplications=no
 RestartApplications=no
-; No [Registry] / Startup-folder entries on purpose, see the header comment.
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
@@ -88,10 +65,7 @@ const
 procedure QtSleep(Milliseconds: Cardinal);
   external 'Sleep@kernel32.dll stdcall';
 
-// The app is a ShutdownMode=OnExplicitShutdown tray process: closing its
-// window only hides it. Its config is written atomically and nothing is left
-// unsaved, so terminating the process is safe. WM_CLOSE / Restart Manager
-// cannot reliably exit it, which is why we do this explicitly.
+// Closing the window only hides the tray application.
 procedure KillRunningApp;
 var
   ResultCode, Retry: Integer;

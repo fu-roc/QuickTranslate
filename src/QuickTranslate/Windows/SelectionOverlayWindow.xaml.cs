@@ -61,7 +61,7 @@ public partial class SelectionOverlayWindow : Window
         base.OnMouseLeftButtonUp(e);
         if (_startDip is null) return;
 
-        // 用 Win32 光标物理坐标确定选区，截图不再受 WPF DIP / 多屏缩放影响
+        // 截图使用 Win32 物理像素坐标。
         var endPhysical = NativeMethods.GetCursorPosition();
         ReleaseMouseCapture();
         _startDip = null;
