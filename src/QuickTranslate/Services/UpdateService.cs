@@ -18,7 +18,10 @@ public sealed record UpdateCheckResult(
     Version CurrentVersion,
     Version? LatestVersion = null,
     string? ReleaseUrl = null,
-    string? Notes = null);
+    string? Notes = null)
+{
+    public string? InstallerName { get; init; }
+}
 
 public static class UpdateService
 {
@@ -129,7 +132,10 @@ public static class UpdateService
         return new UpdateCheckResult(
             UpdateStatus.Available,
             message,
-            current, latest, url, notes);
+            current, latest, url, notes)
+        {
+            InstallerName = installer,
+        };
     }
 
     /// <summary>将发布标签中的版本号转换为四段版本。</summary>

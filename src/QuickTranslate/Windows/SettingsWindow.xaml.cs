@@ -7,6 +7,7 @@ using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfMouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using WpfButton = System.Windows.Controls.Button;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
 
 namespace QuickTranslate.Windows;
 
@@ -27,9 +28,10 @@ public partial class SettingsWindow : Window
     private WpfButton? _captureButton;
     private string _captureOriginal = string.Empty;
 
-    public SettingsWindow(AppConfig config)
+    public SettingsWindow(AppConfig config, bool focusTranslationService = false)
     {
         InitializeComponent();
+        MaxHeight = SystemParameters.WorkArea.Height;
         AppIdBox.Text = config.AppId;
         SecretBox.Password = config.Secret;
         TakeWordBox.Text = config.TakeWordHotkey;
@@ -38,7 +40,19 @@ public partial class SettingsWindow : Window
         LanguageBox.SelectedValue = config.TargetLanguage;
         AutoStartBox.IsChecked = AutoStartService.GetStatus().Enabled;
 
-        VersionText.Text = $"版本 {AppVersion.Display} · 日志：%LOCALAPPDATA%\\QuickTranslate\\app.log";
+        VersionText.Text = $"版本 {AppVersion.Display}";
+
+        if (focusTranslationService)
+        {
+            Loaded += (_, _) =>
+            {
+                bool needsSecret = !string.IsNullOrWhiteSpace(AppIdBox.Text)
+                    && string.IsNullOrWhiteSpace(SecretBox.Password);
+                FrameworkElement field = needsSecret ? SecretBox : AppIdBox;
+                field.BringIntoView();
+                field.Focus();
+            };
+        }
 
         if (LanguageBox.SelectedItem is null)
         {
@@ -76,8 +90,7 @@ public partial class SettingsWindow : Window
         _captureOriginal = box.Text;
         box.IsReadOnly = true;
         box.Text = CapturePlaceholder;
-        box.Background = new System.Windows.Media.SolidColorBrush(
-            System.Windows.Media.Color.FromRgb(0xE8, 0xF0, 0xFE));
+        box.SetResourceReference(WpfTextBox.BackgroundProperty, "HighlightBrush");
         button.Content = "取消";
         SetStatus("正在录制：请按住 Ctrl / Alt / Shift / Win 中至少一个，再按一个按键；Esc 取消，Backspace 清空。", false);
         box.Focus();
@@ -88,7 +101,7 @@ public partial class SettingsWindow : Window
         if (_captureBox is null) return;
 
         _captureBox.IsReadOnly = false;
-        _captureBox.Background = System.Windows.Media.Brushes.White;
+        _captureBox.ClearValue(WpfTextBox.BackgroundProperty);
         if (restore) _captureBox.Text = _captureOriginal;
         if (_captureButton is not null) _captureButton.Content = "录制";
         _captureBox = null;
@@ -214,9 +227,8 @@ public partial class SettingsWindow : Window
 
     private void SetStatus(string message, bool isError)
     {
-        StatusText.Foreground = isError
-            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC0, 0x39, 0x2B))
-            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1D, 0x6F, 0x42));
+        StatusText.SetResourceReference(WpfTextBlock.ForegroundProperty, isError ? "ErrorBrush" : "SuccessBrush");
         StatusText.Text = message;
+        StatusText.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

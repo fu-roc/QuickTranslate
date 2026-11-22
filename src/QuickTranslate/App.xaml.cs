@@ -40,23 +40,20 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _config = ConfigService.Load(out string? configNotice);
+        _config = ConfigService.Load(out string? configNotice, out bool firstRun);
         _translator = new BaiduTranslator(_config);
         _result = new ResultWindow();
         _result.Hidden += CancelCurrentChain;
         _hotkeys = new HotkeyService();
         _hotkeys.HotkeyPressed += OnHotkeyPressed;
-        _tray = new TrayService(ShowMainWindow, OpenSettings, ShowUpdateWindow, ExitApplication);
+        _tray = new TrayService(ShowMainWindow, () => OpenSettings(), ShowUpdateWindow, ExitApplication);
 
-        RegisterHotkeys();
+        bool hotkeysRegistered = RegisterHotkeys();
         CheckAutoStart();
 
         if (configNotice is not null) _tray.Notify(configNotice);
-        if (!_config.IsConfigured)
-        {
-            _tray.Notify("请先填写百度翻译 APPID 和密钥");
-            OpenSettings();
-        }
+        else if (firstRun && hotkeysRegistered)
+            _tray.Notify($"选中英文单词，按 {_config.TakeWordHotkey} 离线查词。");
     }
 
     private void InstallExceptionHooks()
@@ -86,13 +83,12 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>唯一的注册点：启动时、设置窗口关闭后都走这里，按当前 _config 注册。</summary>
-    private void RegisterHotkeys()
+    private bool RegisterHotkeys()
     {
         string error = _hotkeys.RegisterPair(TakeWordHotkeyId, _config.TakeWordHotkey, OcrHotkeyId, _config.OcrHotkey);
-        if (error.Length > 0)
-        {
-            _result.ShowError(error, "打开设置", OpenSettings);
-        }
+        if (error.Length == 0) return true;
+        _result.ShowError(error, "打开设置", () => OpenSettings());
+        return false;
     }
 
     private async void OnHotkeyPressed(int id)
@@ -150,10 +146,11 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _result.ShowLoading("翻译中…");
+        string? pronunciationSource = PronunciationService.UsesEnglishAlphabet(selected) ? selected.Trim() : null;
         BaiduTranslator translator = _translator;
         if (_config.TargetLanguage == TranslationLanguage.SimplifiedChinese)
         {
+            _result.ShowLoading("查词中…", pronunciationSource);
             string[]? definitions = await EnglishChineseDictionary.FindAsync(selected, token);
             token.ThrowIfCancellationRequested();
             if (definitions is not null)
@@ -163,7 +160,8 @@ public partial class App : System.Windows.Application
             }
         }
 
-        await ShowTranslationAsync(selected, translator, token);
+        _result.ShowLoading("翻译中…", pronunciationSource);
+        await ShowTranslationAsync(selected, translator, token, pronunciationSource);
     }
 
     private async Task RunOcrAsync(CancellationToken token)
@@ -200,29 +198,26 @@ public partial class App : System.Windows.Application
         await ShowTranslationAsync(recognized, _translator, token);
     }
 
-    private async Task ShowTranslationAsync(string source, BaiduTranslator translator, CancellationToken token)
+    private async Task ShowTranslationAsync(
+        string source, BaiduTranslator translator, CancellationToken token, string? pronunciationSource = null)
     {
         string translated = await translator.TranslateAsync(source, token);
         token.ThrowIfCancellationRequested();
-        _result.ShowResult(source, translated);
+        _result.ShowResult(source, translated, pronunciationSource);
     }
 
     /// <summary>底层异常一律先映射成中文原因，再按错误类别决定是否给「打开设置」/「重试」。</summary>
     private void ShowFailure(Exception ex, int failedHotkeyId)
     {
         FailureInfo info = ErrorMapper.Map(ex);
-        switch (info.Action)
+        (string? Label, Action? Action) recovery = info.Action switch
         {
-            case ErrorAction.Settings:
-                _result.ShowError(info.Message, "打开设置", OpenSettings);
-                break;
-            case ErrorAction.Retry:
-                _result.ShowError(info.Message, "重试", () => RunChainLater(failedHotkeyId));
-                break;
-            default:
-                _result.ShowError(info.Message);
-                break;
-        }
+            ErrorAction.Settings => ("配置翻译服务", () => OpenSettings(focusTranslationService: true)),
+            ErrorAction.Retry => ("重试", () => RunChainLater(failedHotkeyId)),
+            _ => (null, null),
+        };
+        _result.ShowError(info.Message, recovery.Label, recovery.Action,
+            keepPronunciation: failedHotkeyId == TakeWordHotkeyId);
     }
 
     private void ShowMainWindow()
@@ -254,7 +249,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void OpenSettings()
+    private void OpenSettings(bool focusTranslationService = false)
     {
         _result.HideWindow();
         CancelCurrentChain();
@@ -263,7 +258,11 @@ public partial class App : System.Windows.Application
         _hotkeys.UnregisterAll();
         try
         {
-            new SettingsWindow(_config) { ApplyConfig = ApplyConfig, CheckForUpdates = ShowUpdateWindow }.ShowDialog();
+            new SettingsWindow(_config, focusTranslationService)
+            {
+                ApplyConfig = ApplyConfig,
+                CheckForUpdates = ShowUpdateWindow,
+            }.ShowDialog();
         }
         finally { RegisterHotkeys(); }
     }

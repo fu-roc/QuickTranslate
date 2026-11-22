@@ -11,12 +11,7 @@ public sealed class TrayService : IDisposable
 
     public TrayService(Action openMainWindow, Action openSettings, Action checkForUpdates, Action exitApplication)
     {
-        _menu = new ContextMenuStrip();
-        _menu.Items.Add(new ToolStripMenuItem("打开主界面", null, (_, _) => openMainWindow()));
-        _menu.Items.Add(new ToolStripMenuItem("设置", null, (_, _) => openSettings()));
-        _menu.Items.Add(new ToolStripMenuItem("检查更新", null, (_, _) => checkForUpdates()));
-        _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add(new ToolStripMenuItem("退出", null, (_, _) => exitApplication()));
+        _menu = CreateMenu(openMainWindow, openSettings, checkForUpdates, exitApplication);
 
         _icon = new NotifyIcon
         {
@@ -32,6 +27,34 @@ public sealed class TrayService : IDisposable
         {
             if (args.Button == MouseButtons.Left) openMainWindow();
         }
+    }
+
+    private static ContextMenuStrip CreateMenu(
+        Action openMainWindow, Action openSettings, Action checkForUpdates, Action exitApplication)
+    {
+        var renderer = new TrayMenuRenderer();
+        var menu = new ContextMenuStrip
+        {
+            ShowImageMargin = false,
+            ShowCheckMargin = false,
+            Renderer = renderer,
+        };
+        menu.Opening += (_, _) =>
+        {
+            if (SystemInformation.HighContrast) menu.RenderMode = ToolStripRenderMode.System;
+            else if (menu.Renderer != renderer) menu.Renderer = renderer;
+        };
+        menu.Items.AddRange([
+            MenuItem("打开主界面", openMainWindow),
+            MenuItem("设置", openSettings),
+            MenuItem("检查更新", checkForUpdates),
+            new ToolStripSeparator { Margin = new Padding(0, 3, 0, 3) },
+            MenuItem("退出", exitApplication),
+        ]);
+        return menu;
+
+        static ToolStripMenuItem MenuItem(string text, Action action) =>
+            new(text, null, (_, _) => action()) { Padding = new Padding(0, 7, 0, 7) };
     }
 
     public void Notify(string message) =>

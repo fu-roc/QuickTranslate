@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build the portable QuickTranslate zip (single-file exe + README).
+  Build the portable QuickTranslate zip (single-file exe, README and license).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\publish.ps1
@@ -55,6 +55,8 @@ $exe = Join-Path $publishDir 'QuickTranslate.exe'
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Published exe not found: $exe" }
 $readme = Join-Path $publishDir 'README.md'
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $readme
+$license = Join-Path $publishDir 'LICENSE'
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $license
 
 $pdb = Join-Path $publishDir 'QuickTranslate.pdb'
 if (Test-Path -LiteralPath $pdb -PathType Leaf) {
@@ -64,7 +66,7 @@ if (Test-Path -LiteralPath $pdb -PathType Leaf) {
 $zip = Join-Path $OutputDir "$name.zip"
 # Pass the files, not the folder: Windows PowerShell 5.1 writes backslash-separated
 # entry names when archiving a directory, which breaks some unzip tools.
-Compress-Archive -LiteralPath $exe,$readme -DestinationPath $zip -CompressionLevel Optimal
+Compress-Archive -LiteralPath $exe,$readme,$license -DestinationPath $zip -CompressionLevel Optimal
 
 $mb = [math]::Round((Get-Item -LiteralPath $zip).Length / 1MB, 1)
 Write-Host "OK: $zip ($mb MB)"

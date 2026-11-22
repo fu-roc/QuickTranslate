@@ -1,17 +1,14 @@
 <Window x:Class="QuickTranslate.Windows.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="QuickTranslate · 翻译"
-        Width="920"
-        Height="580"
-        MinWidth="680"
-        MinHeight="420"
-        Background="#FFFFFF"
+        xmlns:windows="clr-namespace:QuickTranslate.Windows"
+        Title="QuickTranslate · 手动翻译"
+        Style="{StaticResource DesktopWindow}"
+        Width="900" Height="540" MinWidth="680" MinHeight="420"
         WindowStartupLocation="CenterScreen"
-        ShowInTaskbar="True"
         PreviewKeyDown="Window_OnPreviewKeyDown"
         Closing="Window_OnClosing">
-    <Grid Margin="20">
+    <Grid Margin="24,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -19,153 +16,110 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" Margin="0,0,0,14">
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                <TextBlock Text="QuickTranslate"
-                           FontSize="17"
-                           FontWeight="SemiBold"
-                           Foreground="#1F2937" />
-                <TextBlock Text="手动翻译"
-                           FontSize="12"
-                           Foreground="#9AA0A6"
-                           Margin="10,4,0,0" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center">
-                <TextBlock Text="语言设置仅本窗口生效"
-                           FontSize="11"
-                           Foreground="#9AA0A6"
-                           VerticalAlignment="Center"
-                           Margin="0,0,12,0"
-                           ToolTip="在设置页选择划词和截图 OCR 的目标语言。" />
-                <Button Content="设置"
-                        Width="62"
-                        Padding="8,4"
-                        Click="Settings_OnClick" />
-            </StackPanel>
+        <DockPanel Margin="0,0,0,16">
+            <Button DockPanel.Dock="Right" Content="设置" MinWidth="64"
+                    Style="{StaticResource ActionButton}" Click="Settings_OnClick" />
+            <TextBlock Text="手动翻译" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
         </DockPanel>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="26" />
+                <ColumnDefinition Width="14" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <DockPanel Grid.Column="0">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="源语言"
-                               FontSize="12"
-                               Foreground="#6B7280"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                    <ComboBox x:Name="SourceLanguageBox"
-                              Width="132"
-                              Padding="6,3"
-                              SelectedValuePath="Code"
-                              DisplayMemberPath="Name"
-                              SelectionChanged="Language_OnChanged"
-                              ToolTip="默认自动检测。" />
-                </StackPanel>
-                <Border BorderBrush="#E3E8EF"
-                        BorderThickness="1"
-                        CornerRadius="4"
-                        Background="#FFFFFF">
-                    <TextBox x:Name="SourceBox"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Disabled"
-                             Padding="10"
-                             FontSize="14"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             SpellCheck.IsEnabled="False"
-                             TextChanged="SourceBox_OnTextChanged" />
-                </Border>
-            </DockPanel>
+            <Border Style="{StaticResource Panel}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,0,0,1" Padding="14,9">
+                        <DockPanel>
+                            <ComboBox x:Name="SourceLanguageBox" DockPanel.Dock="Right" Width="132"
+                                      Style="{StaticResource ChoiceField}"
+                                      AutomationProperties.Name="源语言"
+                                      SelectedValuePath="Code" DisplayMemberPath="Name"
+                                      SelectionChanged="Language_OnChanged" />
+                            <windows:PronunciationButton x:Name="PronounceSourceButton" DockPanel.Dock="Right"
+                                                         Margin="8,0,8,0" MinWidth="60"
+                                                         Style="{StaticResource ActionButton}"
+                                                         ToolTipService.ShowOnDisabled="True"
+                                                         ToolTip="朗读选中的英文或全部原文，再点一次可停止。" />
+                            <TextBlock Text="原文" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
+                    <TextBlock x:Name="PronunciationStatus" DockPanel.Dock="Top" Margin="14,8,14,0"
+                               FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource ErrorBrush}"
+                               Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+                    <Grid>
+                        <TextBox x:Name="SourceBox" AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Padding="14,12" FontSize="15"
+                                 BorderThickness="0" Background="Transparent" SpellCheck.IsEnabled="False"
+                                 Foreground="{StaticResource TextBrush}"
+                                 AutomationProperties.Name="原文"
+                                 SelectionChanged="SourceBox_OnSelectionChanged"
+                                 TextChanged="SourceBox_OnTextChanged" />
+                        <TextBlock Text="输入或粘贴文本" Margin="14,12"
+                                   Foreground="{StaticResource MutedBrush}" FontSize="15"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text.Length, ElementName=SourceBox}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </DockPanel>
+            </Border>
 
-            <TextBlock Grid.Column="1"
-                       Text="→"
-                       FontSize="18"
-                       Foreground="#C4CBD6"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
-
-            <DockPanel Grid.Column="2">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock
-                               Text="译文"
-                               FontSize="12"
-                               Foreground="#6B7280"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                    <ComboBox x:Name="TargetLanguageBox"
-                              Width="132"
-                              Padding="6,3"
-                              SelectedValuePath="Code"
-                              DisplayMemberPath="Name"
-                              SelectionChanged="Language_OnChanged" />
-                </StackPanel>
-                <Border BorderBrush="#E3E8EF"
-                        BorderThickness="1"
-                        CornerRadius="4"
-                        Background="#F8FAFC">
-                    <TextBox x:Name="ResultBox"
-                             IsReadOnly="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Disabled"
-                             Padding="10"
-                             FontSize="14"
-                             BorderThickness="0"
-                             Background="Transparent" />
-                </Border>
-            </DockPanel>
+            <Border Grid.Column="2" Style="{StaticResource Panel}" Background="{StaticResource OutputBrush}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,0,0,1" Padding="14,9">
+                        <DockPanel>
+                            <ComboBox x:Name="TargetLanguageBox" DockPanel.Dock="Right" Width="132"
+                                      Style="{StaticResource ChoiceField}"
+                                      AutomationProperties.Name="目标语言"
+                                      ToolTip="仅用于手动翻译。划词和截图 OCR 的目标语言在设置中调整。"
+                                      SelectedValuePath="Code" DisplayMemberPath="Name"
+                                      SelectionChanged="Language_OnChanged" />
+                            <TextBlock Text="译文" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
+                    <TextBox x:Name="ResultBox" IsReadOnly="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" Padding="14,12" FontSize="15"
+                             Foreground="{StaticResource TextBrush}"
+                             BorderThickness="0" Background="Transparent" AutomationProperties.Name="译文" />
+                </DockPanel>
+            </Border>
         </Grid>
 
-        <Grid Grid.Row="2" Margin="0,12,0,10">
-            <TextBlock x:Name="StatusText"
-                       Text="输入文本后点「翻译」或按 Ctrl+Enter"
-                       FontSize="12"
-                       Foreground="#6B7280"
-                       TextWrapping="Wrap"
-                       VerticalAlignment="Center" />
-            <TextBlock x:Name="CountText"
-                       Text="0 字符 · 0 字节"
-                       FontSize="11"
-                       Foreground="#9AA0A6"
-                       HorizontalAlignment="Right"
-                       VerticalAlignment="Center" />
+        <Grid Grid.Row="2" Margin="2,10,2,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedBrush}"
+                       FontSize="12" TextWrapping="Wrap" Margin="0,0,12,0" VerticalAlignment="Center"
+                       AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="CountText" Grid.Column="1" Foreground="{StaticResource MutedBrush}"
+                       FontSize="12" VerticalAlignment="Center" />
         </Grid>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="SettingsOnErrorButton"
-                    Content="打开设置"
-                    Width="88"
-                    Margin="0,0,8,0"
-                    Padding="10,6"
-                    Visibility="Collapsed"
-                    Click="Settings_OnClick" />
-            <Button Content="清空"
-                    Width="72"
-                    Margin="0,0,8,0"
-                    Padding="10,6"
-                    Click="Clear_OnClick" />
-            <Button x:Name="CopyButton"
-                    Content="复制译文"
-                    Width="90"
-                    Margin="0,0,8,0"
-                    Padding="10,6"
-                    IsEnabled="False"
-                    Click="Copy_OnClick" />
-            <Button x:Name="TranslateButton"
-                    Content="翻译 (Ctrl+Enter)"
-                    MinWidth="140"
-                    Padding="14,6"
-                    Background="#2F6BED"
-                    Foreground="#FFFFFF"
-                    BorderThickness="0"
-                    Click="Translate_OnClick" />
+            <Button x:Name="SettingsOnErrorButton" Content="配置翻译服务"
+                    Style="{StaticResource ActionButton}" Visibility="Collapsed"
+                    Margin="0,0,8,0" Click="TranslationSettings_OnClick" />
+            <Button Content="清空" MinWidth="64" Style="{StaticResource ActionButton}"
+                    Margin="0,0,8,0" Click="Clear_OnClick" />
+            <Button x:Name="CopyButton" Content="复制译文" Style="{StaticResource ActionButton}"
+                    IsEnabled="False" Margin="0,0,8,0" Click="Copy_OnClick" />
+            <Button x:Name="TranslateButton" Content="翻译 (Ctrl+Enter)" MinWidth="148"
+                    Style="{StaticResource PrimaryButton}" Click="Translate_OnClick" />
         </StackPanel>
     </Grid>
 </Window>

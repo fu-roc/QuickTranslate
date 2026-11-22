@@ -49,7 +49,7 @@ public sealed class BaiduTranslator
         if (!_config.IsConfigured)
         {
             throw new TranslationException(
-                "尚未填写百度翻译 APPID 和密钥，请在托盘菜单打开「设置」。",
+                "在线翻译需要百度翻译 APPID 和密钥，请在「翻译服务」中填写。",
                 TranslationErrorCategory.Configuration);
         }
         if (string.IsNullOrWhiteSpace(text))

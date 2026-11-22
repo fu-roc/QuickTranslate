@@ -19,6 +19,7 @@
 AppId={{8F3D6A21-4C7B-4E95-A1D2-6B90C5E83F17}}
 AppName={#MyAppName}
 AppVersion={#QtVersion}
+VersionInfoVersion={#QtVersion}
 AppVerName={#MyAppName} {#QtVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
@@ -50,6 +51,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#QtExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{commonprograms}\{#MyAppName}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Select text, press the hotkey, read the translation"

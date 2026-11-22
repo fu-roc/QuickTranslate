@@ -3,6 +3,7 @@ using System.Windows;
 using QuickTranslate.Models;
 using QuickTranslate.Services;
 using WpfComboBox = System.Windows.Controls.ComboBox;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
 using WpfKey = System.Windows.Input.Key;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfSelectionChangedEventArgs = System.Windows.Controls.SelectionChangedEventArgs;
@@ -11,18 +12,14 @@ namespace QuickTranslate.Windows;
 
 public partial class MainWindow : Window
 {
-    private static readonly System.Windows.Media.SolidColorBrush MutedBrush = Brush("#6B7280");
-    private static readonly System.Windows.Media.SolidColorBrush ErrorBrush = Brush("#C0392B");
-    private static readonly System.Windows.Media.SolidColorBrush CountNormalBrush = Brush("#9AA0A6");
-
     /// <summary>由 App 注入：text, from, to, token。始终指向当前生效的翻译器。</summary>
     public Func<string, string, string, CancellationToken, Task<string>>? TranslateAsync { get; set; }
 
     /// <summary>由 App 注入：把主界面语种偏好单独落盘，返回 null 表示成功，否则返回中文原因。</summary>
     public Func<string, string, string?>? SaveLanguage { get; set; }
 
-    /// <summary>由 App 注入：打开设置页（错误为配置类时也会显示按钮）。</summary>
-    public Action? OpenSettings { get; set; }
+    /// <summary>参数为 true 时直接定位到翻译服务。</summary>
+    public Action<bool>? OpenSettings { get; set; }
 
     private CancellationTokenSource? _cts;
     private bool _forceClose;
@@ -33,6 +30,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         SourceLanguageBox.ItemsSource = TranslationLanguage.Sources;
         TargetLanguageBox.ItemsSource = TranslationLanguage.Targets;
+        PronounceSourceButton.FeedbackChanged += SetPronunciationStatus;
         ApplyConfig(config);
         UpdateCount();
         Loaded += (_, _) => SourceBox.Focus();
@@ -49,6 +47,7 @@ public partial class MainWindow : Window
         }
         finally { _loadingLanguage = false; }
 
+        UpdatePronunciation();
         if ((SelectedFrom, SelectedTo) != previousLanguages) ResetTranslationForLanguageChange();
     }
 
@@ -71,6 +70,7 @@ public partial class MainWindow : Window
     {
         if (_loadingLanguage || !IsLoaded) return;
 
+        UpdatePronunciation();
         ResetTranslationForLanguageChange();
         string? failure = SaveLanguage?.Invoke(SelectedFrom, SelectedTo);
         if (failure is not null) SetStatus(failure, isError: true);
@@ -172,12 +172,31 @@ public partial class MainWindow : Window
     private void SetStatus(string message, bool isError)
     {
         StatusText.Text = message;
-        StatusText.Foreground = isError ? ErrorBrush : MutedBrush;
+        StatusText.SetResourceReference(WpfTextBlock.ForegroundProperty, isError ? "ErrorBrush" : "MutedBrush");
         if (!isError) SettingsOnErrorButton.Visibility = Visibility.Collapsed;
     }
 
-    private void SourceBox_OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) =>
+    private void SourceBox_OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
         UpdateCount();
+        UpdatePronunciation();
+    }
+
+    private void SourceBox_OnSelectionChanged(object sender, RoutedEventArgs e) => UpdatePronunciation();
+
+    private void UpdatePronunciation()
+    {
+        string text = (SourceBox.SelectionLength == 0 ? SourceBox.Text : SourceBox.SelectedText).Trim();
+        bool canSpeak = text.Length > 0 && (SelectedFrom == TranslationLanguage.English
+            || (SelectedFrom == TranslationLanguage.Auto && PronunciationService.UsesEnglishAlphabet(text)));
+        PronounceSourceButton.SpeechText = canSpeak ? text : null;
+    }
+
+    private void SetPronunciationStatus(string? message)
+    {
+        PronunciationStatus.Text = message ?? string.Empty;
+        PronunciationStatus.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     private void UpdateCount()
     {
@@ -185,7 +204,8 @@ public partial class MainWindow : Window
         int bytes = Encoding.UTF8.GetByteCount(text);
         CountText.Text = $"{text.Length} 字符 · {bytes:N0} 字节";
         // 上限直接引用翻译器里的常量，改分段策略时不用再到这里同步改一个魔法数
-        CountText.Foreground = bytes > BaiduTranslator.MaxInputBytes ? ErrorBrush : CountNormalBrush;
+        CountText.SetResourceReference(WpfTextBlock.ForegroundProperty,
+            bytes > BaiduTranslator.MaxInputBytes ? "ErrorBrush" : "MutedBrush");
         CountText.ToolTip = bytes > BaiduTranslator.MaxInputBytes
             ? $"超过单次上限（{BaiduTranslator.MaxChunks} 段 × {BaiduTranslator.MaxQueryBytes} 字节），请分成多次翻译"
             : $"百度单次上限 {BaiduTranslator.MaxQueryBytes} 字节，程序会自动分段（最多 {BaiduTranslator.MaxChunks} 段）";
@@ -197,7 +217,7 @@ public partial class MainWindow : Window
         SourceBox.Text = string.Empty;
         ResultBox.Text = string.Empty;
         CopyButton.IsEnabled = false;
-        SetStatus("输入文本后点「翻译」或按 Ctrl+Enter", isError: false);
+        SetStatus(string.Empty, isError: false);
         SourceBox.Focus();
     }
 
@@ -209,7 +229,9 @@ public partial class MainWindow : Window
         SetStatus(ok ? "译文已复制到剪贴板" : "复制失败：剪贴板被其他程序占用，请再点一次重试", !ok);
     }
 
-    private void Settings_OnClick(object sender, RoutedEventArgs e) => OpenSettings?.Invoke();
+    private void Settings_OnClick(object sender, RoutedEventArgs e) => OpenSettings?.Invoke(false);
+
+    private void TranslationSettings_OnClick(object sender, RoutedEventArgs e) => OpenSettings?.Invoke(true);
 
     internal static bool IsTranslateShortcut(WpfKey key, System.Windows.Input.ModifierKeys modifiers) =>
         key == WpfKey.Enter &&
@@ -245,11 +267,5 @@ public partial class MainWindow : Window
         if (cts is null) return;
         try { cts.Cancel(); }
         catch (Exception ex) { LogService.Warn("主窗口：取消在途翻译失败", ex); }
-    }
-
-    private static System.Windows.Media.SolidColorBrush Brush(string hex)
-    {
-        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
-        return new System.Windows.Media.SolidColorBrush(color);
     }
 }

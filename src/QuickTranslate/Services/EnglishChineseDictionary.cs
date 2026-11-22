@@ -14,12 +14,15 @@ internal static partial class EnglishChineseDictionary
 
     public static async Task<string[]?> FindAsync(string text, CancellationToken cancellationToken)
     {
-        string word = text.AsSpan().Trim().Trim(SurroundingPunctuation).Trim().ToString().Replace('’', '\'');
+        string word = NormalizeWord(text);
         if (word.Length > 80 || !WordPattern().IsMatch(word)) return null;
 
         var entries = await Entries.Value.WaitAsync(cancellationToken);
         return entries.TryGetValue(word, out string? definitions) ? definitions.Split('\t') : null;
     }
+
+    internal static string NormalizeWord(string text) =>
+        text.AsSpan().Trim().Trim(SurroundingPunctuation).Trim().ToString().Replace('’', '\'');
 
     [GeneratedRegex(@"\A[A-Za-z]+(?:['-][A-Za-z]+)*\z")]
     private static partial Regex WordPattern();

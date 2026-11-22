@@ -25,9 +25,10 @@ public static class ConfigService
 
     private static readonly string BackupPath = ConfigPath + ".bak";
 
-    public static AppConfig Load(out string? notice)
+    public static AppConfig Load(out string? notice, out bool firstRun)
     {
         notice = null;
+        firstRun = false;
 
         string? json;
         try
@@ -44,6 +45,7 @@ public static class ConfigService
 
         if (json is null)
         {
+            firstRun = true;
             var fresh = new AppConfig();
             try
             {
