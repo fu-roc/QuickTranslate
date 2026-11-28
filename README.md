@@ -42,13 +42,13 @@
 
 ## 三步上手
 
-1. **下载并运行** — 到 [Releases](https://github.com/fu-roc/QuickTranslate/releases/latest) 下载 `...-win-x64-setup-*.exe`（系统级安装，需 UAC 授权）或 `...-framework-dependent.zip`（解压即用）。启动后 QuickTranslate 会驻留在系统托盘。
+1. **下载并安装** — 到 Releases 下载以 `-win-x64-setup.exe` 结尾的推荐安装包。安装时需 UAC 授权，启动后 QuickTranslate 会驻留在系统托盘。[下载最新版](https://github.com/fu-roc/QuickTranslate/releases/latest)
 2. **试一次离线查词** — 在浏览器、PDF 或 IDE 里选中 `run`，按 `Alt+T`。中文释义会显示在光标旁，点任意一条即可复制。
 3. **需要在线翻译时再配置** — 翻译短语、句子或词典未收录的词时，可点结果窗里的「配置翻译服务」。在 [百度翻译开放平台](https://fanyi-api.baidu.com/) 开通「通用文本翻译 API」，把 APPID 和密钥填入设置页的「翻译服务」并保存。
 
 想手动输入？**左键单击托盘图标**打开双栏主界面：左边写原文、右边看译文，`Ctrl+Enter` 翻译，源语言和目标语言都能单独选并记住。托盘右键还有设置、检查更新、退出。
 
-> 环境：Windows 10 2004（build 19041）或更高（已在 Windows 11 验证），需要 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；截图 OCR 还需要系统安装对应语言的 OCR 语言包（设置 → 时间和语言 → 语言和区域）。
+> 运行环境为 Windows 10 2004（build 19041）或更高的 x64 系统。推荐安装包内置 .NET 10 Desktop Runtime。英文截图识别开箱即用，无需额外安装 Windows 英语 OCR 或 Visual C++ 运行库。其他语言使用相应的 Windows OCR 语言包。
 
 ## 它能做什么
 
@@ -56,7 +56,7 @@
 | --- | --- | --- |
 | 划词翻译 | 选中文字 → `Alt+T` | 模拟 `Ctrl+C` 取词，结果浮现在光标旁并保留当前输入焦点。目标为简体中文时，英文单词优先离线查词 |
 | 英语发音 | 划词悬浮窗或主界面原文区 →「发音」 | 使用 Windows 本机英语语音，可朗读单词、短语和句子，再点一次可停止 |
-| 截图 OCR | `Alt+S` → 框选屏幕 | `Windows.Media.Ocr` 本地识别，图片全程只在内存里流转，适合不能复制的界面 |
+| 截图 OCR | `Alt+S` → 框选屏幕 | 内置 Tesseract 英文模型与 Windows OCR 在本地识别，适合不能复制的界面 |
 | 双栏主界面 | 单击托盘图标 | 手动输入翻译，源语言 / 译文语言分别可选，`Ctrl+Enter` 触发，关闭只隐藏 |
 | 悬浮结果窗 | 自动出现 | 点击外部即关闭；点译文即复制；出错给中文原因和「重试 / 打开设置」，不甩英文异常 |
 | 自定义快捷键 | 设置页点「录制」 | 直接按下想要的组合键即可，冲突、系统保留组合都会给中文提示 |
@@ -80,14 +80,14 @@
 
 ## 下载
 
-到 [GitHub Releases](https://github.com/fu-roc/QuickTranslate/releases/latest) 下最新版，两种产物内容相同，**二选一**：
+首次安装请选择**推荐安装包**。确定电脑上已装 x64 版 .NET 10 Desktop Runtime 时，可以选轻量安装包。[GitHub Releases](https://github.com/fu-roc/QuickTranslate/releases/latest)
 
-| 产物 | 适合谁 | 说明 |
+| 文件名结尾 | 安装包 | .NET 10 Desktop Runtime |
 | --- | --- | --- |
-| `...-framework-dependent.zip` 便携版 | 想绿色免安装 | 解压到固定目录，双击单文件 exe 即用；不写安装信息、不建卸载入口，升级就是替换 exe |
-| `...-win-x64-setup-*.exe` 安装包 | 想要开始菜单和卸载入口 | 中文向导，默认装到 `C:\Program Files\QuickTranslate`，**系统级安装，双击时需 UAC 管理员授权**；可在「设置 → 应用」卸载，卸载不删配置 |
+| `-win-x64-setup.exe` | **推荐安装包** | 随软件安装 |
+| `-win-x64-setup-requires-dotnet10.exe` | 轻量安装包 | 需要电脑已安装 x64 版 |
 
-两者都依赖 .NET 10 Desktop Runtime。注意区分：**安装过程**需要管理员权限，**装好的程序**仍以普通权限（`asInvoker`）常驻托盘，不会请求提权。安装包不会创建开机自启项，需要请在设置页勾选。
+安装包使用中文向导，默认装到 `C:\Program Files\QuickTranslate`。安装需管理员权限，程序以普通权限运行。可在「设置 → 应用」卸载，卸载后保留个人配置。
 
 覆盖安装时，安装程序会在复制文件前结束正在运行的托盘实例。安装完成后可勾选「运行 QuickTranslate」。
 
@@ -102,6 +102,8 @@
 **剪贴板会被改吗？** 会。取词靠模拟 `Ctrl+C`，按 `Alt+T` 后剪贴板里是选中的原文；点译文会把译文写进剪贴板。程序不主动恢复原有内容。
 
 **断网能用吗？** 目标语言为简体中文时，划词可以离线查询内置词典收录的英文单词。截图 OCR 的文字识别在本地进行，翻译识别结果、短语和句子仍需联网。
+
+**截图识别需要哪些语言包？** 英文模型随程序打包。要识别中文、日文等文字，可以在 Windows「设置 → 时间和语言 → 语言和区域」中打开对应的语言选项，安装「光学字符识别」。
 
 **如何听英语发音？** 选中英文单词、短语或句子，按 `Alt+T`，再点悬浮窗原文旁的「发音」。发音可离线使用，翻译等待期间或失败后也能播放。手动翻译时，可以在原文区朗读选中的英文或全文，也可以将源语言切换为「英语」来指定英语发音。如果设备缺少英语语音，可在 Windows「设置 → 时间和语言 → 语音」中添加。[微软安装说明](https://support.microsoft.com/en-us/accessibility/windows/narrator/appendix-a-supported-languages-and-voices)
 
@@ -190,8 +192,8 @@
 
 - **取词**：收到热键后释放修饰键，再向前台窗口发送 `Ctrl+C`。剪贴板没有更新时再尝试一次。
 - 取词失败在 `%LOCALAPPDATA%\QuickTranslate\app.log` 留一行诊断（注入是否成功、剪贴板序号是否变化、前后文本长度），**不记录原文**；日志按 1 MB 轮转成 `app.log.old`，磁盘上限约 2 MB。
-- **截图 OCR**：只覆盖光标所在那一块屏幕，不支持跨屏拖拽；选区用 Win32 物理像素坐标确定，不受多屏不同 DPI 缩放影响（覆盖层在副屏的视觉定位可能有偏移）。截图经 `InMemoryRandomAccessStream` 全内存流转，不往临时目录写 PNG；超大图片按 `OcrEngine.MaxImageDimension` 自动缩放。无对应系统语言包时会提示去系统设置添加。
-- **OCR 预处理**：估计字高后缩放截图，对小字以约 24 像素为目标。识别结果过短时尝试另一倍率。用词的坐标重建空格与换行。
+- **截图 OCR**：只覆盖光标所在的屏幕，选区用 Win32 物理像素坐标确定。截图在内存中处理，超大图片按 `OcrEngine.MaxImageDimension` 缩放。程序根据识别结果在 Windows OCR 和内置英文引擎之间选择。Windows OCR 不可用时，使用内置英文引擎。
+- **OCR 预处理**：按字高放大截图。暗淡或小字号文字可用不同的缩放或对比度再识别一次。保留 OCR 的行序和断行，中日韩文本按词的坐标恢复间距。
 - **悬浮窗**：以 `ShowActivated=False` 显示，通过定时读取鼠标状态检测窗口外的完整点击。
 - **主窗口**：主动打开时激活。按 `Esc` 隐藏，按 `Ctrl+Enter` 翻译。
 - **长文本按字节分段**：百度单次 `q` 上限 6000 字节（汉字约 2000 个），按 UTF-8 字节切段并合并译文，最多 8 段，超长明确提示。
@@ -205,37 +207,24 @@
 ```bash
 dotnet build QuickTranslate.slnx -c Debug
 dotnet run --project src/QuickTranslate/QuickTranslate.csproj -c Debug
-
-dotnet publish src/QuickTranslate/QuickTranslate.csproj -c Release -r win-x64 --self-contained false
 ```
 
 内置英汉词库取自 ECDICT，提取词频靠前的 50,000 个单词及中文释义。更新数据时，运行 `python tools/build-dictionary.py <ecdict.csv>`。[词库源文件](https://github.com/skywind3000/ECDICT/blob/39cfb9672c0906b63569e0453c2e6abfb9ab182a/ecdict.csv) · [随程序打包的 MIT 许可](https://github.com/skywind3000/ECDICT/blob/39cfb9672c0906b63569e0453c2e6abfb9ab182a/LICENSE)
 
-三种发布形态（Release / win-x64 实测）：
+内置英文 OCR 使用 Tesseract 和 `tessdata_fast` 英文模型。[引擎构建方式与模型来源](src/QuickTranslate/Assets/Ocr/README.md)
 
-| 形态 | 关键参数 | 产物 | 体积 | 目标机要求 |
-| --- | --- | --- | --- | --- |
-| 框架依赖 | `--self-contained false` | 6 个文件 | 25 MB | .NET 10 Desktop Runtime |
-| **框架依赖 + 单文件（默认）** | 再加 `-p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true` | 1 个 exe | 25 MB | .NET 10 Desktop Runtime |
-| 自包含单文件 | `--self-contained true` + 上面三个单文件参数 | 1 个 exe | **190 MB** | 无 |
-
-体积主要来自 WinRT 投影 `Microsoft.Windows.SDK.NET.dll`（24 MB）；自包含还会打包整套 WPF 运行时，首次启动需自解压到系统临时目录。
-
-生成产物（PowerShell，项目根目录）：
+在项目根目录运行发布脚本即可构建两种 Windows x64 安装包。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish.ps1                 # 便携版 ZIP
-powershell -ExecutionPolicy Bypass -File .\publish.ps1 -SelfContained   # 便携版 zip，目标机零依赖
-powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate\QuickTranslate.exe   # 安装包，-Exe 必填
+powershell -ExecutionPolicy Bypass -File .\publish.ps1
 ```
 
 安装包需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)。脚本从 PATH 或 Program Files 查找 `ISCC.exe`，也可用 `-ISCC` 指定。安装定义和简体中文语言文件在 `packaging/`。
 
-带时间戳的产物位于 `artifacts/`。便携 ZIP 内含 EXE、本说明和 MIT 许可证，调试符号单独输出。默认发布版本取自 `QuickTranslate.csproj` 的 `<Version>`。
+两个安装包默认生成在 `artifacts/installers/`，版本取自 `QuickTranslate.csproj`。两版均打包离线词典、OCR 引擎、英文模型和第三方许可。推荐包将 .NET 运行时随应用一同打包。
 
-- 便携版解压到一个**不会再移动的固定目录**（如 `%LOCALAPPDATA%\QuickTranslate\`），从那里运行一次、到设置里点一次「保存」，自启路径才会指向它。手动替换 exe 升级前需先从托盘「退出」，否则文件被占用。
 - 安装包默认装到固定路径，无「移动目录导致自启失效」问题；安装/卸载需 UAC，卸载项写 HKLM，不写任何自启项。安装 / 卸载时若程序正在运行，会在复制文件前自动结束它，不弹「请关闭所有实例」或「关闭应用」询问页；向导里点「取消」则完全不动运行中的软件。交互安装结束时默认勾选的「运行 QuickTranslate」会重新拉起新版（静默安装不自动启动）。
-- 两种形态都没有代码签名，首次运行可能被 SmartScreen / Defender 拦截。
+- 安装包未经代码签名，首次运行可能触发 SmartScreen 或 Defender 提示。
 
 </details>
 
@@ -252,7 +241,7 @@ powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\
 <summary><strong>目录结构</strong></summary>
 
 - `src/QuickTranslate/` 是 WPF 应用，包含窗口、服务、Windows 原生接口和嵌入资源。
-- `packaging/` 和根目录的 PowerShell 脚本用于发布便携版和构建安装包。
+- `packaging/` 和根目录的 PowerShell 脚本用于构建安装包。
 - `tools/build-dictionary.py` 生成内置英汉词库，`design/tray-icon/` 存放图标设计源文件。
 
 </details>

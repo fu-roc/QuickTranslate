@@ -6,8 +6,8 @@
 #ifndef QtVersion
   #error QtVersion must be set by build-installer.ps1
 #endif
-#ifndef QtStamp
-  #error QtStamp must be set by build-installer.ps1
+#ifndef QtFilename
+  #error QtFilename must be set by build-installer.ps1
 #endif
 
 #define MyAppName "QuickTranslate"
@@ -31,7 +31,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
-OutputBaseFilename=QuickTranslate-{#QtVersion}-win-x64-setup-{#QtStamp}
+OutputBaseFilename={#QtFilename}
 SetupIconFile=..\src\QuickTranslate\Assets\QuickTranslate.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -52,6 +52,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#QtExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\src\QuickTranslate\Assets\Ocr\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
+#ifdef QtRuntimeLicenses
+Source: "{#QtRuntimeLicenses}\*"; DestDir: "{app}\dotnet-licenses"; Flags: ignoreversion recursesubdirs
+#endif
 
 [Icons]
 Name: "{commonprograms}\{#MyAppName}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Select text, press the hotkey, read the translation"

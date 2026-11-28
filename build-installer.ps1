@@ -3,16 +3,17 @@
     Build the QuickTranslate Windows installer (an Inno Setup Setup.exe).
 
 .DESCRIPTION
-    Packages the single-file executable from publish.ps1 as a machine-wide installer.
+    Packages a published single-file executable as a machine-wide installer.
     Requires Inno Setup 6.5+ on PATH, in Program Files, or passed through -ISCC.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\artifacts\...\QuickTranslate.exe
+    powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -Exe .\QuickTranslate.exe -SelfContained
 #>
 [CmdletBinding()]
 param(
     [string] $Exe,
     [string] $ISCC,
+    [switch] $SelfContained,
     [string] $Version = '',
     [string] $OutputDir
 )
@@ -31,7 +32,7 @@ if (-not $Version) {
     $Version = ([xml](Get-Content -LiteralPath $csproj -Raw -Encoding UTF8)).Project.PropertyGroup.Version
     if (-not $Version) { throw "No <Version> found in $csproj" }
 }
-if (-not $OutputDir) { $OutputDir = Join-Path $root 'artifacts' }
+if (-not $OutputDir) { $OutputDir = Join-Path $root 'artifacts\installers' }
 $OutputDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDir)
 
 if (-not $ISCC) {
@@ -53,12 +54,21 @@ if (-not $ISCC -or -not (Test-Path -LiteralPath $ISCC)) {
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 $iss = Join-Path $root 'packaging\setup.iss'
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$suffix = if ($SelfContained) { '' } else { '-requires-dotnet10' }
+$filename = "QuickTranslate-$Version-win-x64-setup$suffix"
 
 # Quote only when needed: ISCC parses /Dname=value and /Opath as single tokens.
 $exeDefine = if ($Exe -match '\s') { '/DQtExe="' + $Exe + '"' } else { '/DQtExe=' + $Exe }
 $outArg    = if ($OutputDir -match '\s') { '/O"' + $OutputDir + '"' } else { '/O' + $OutputDir }
-$isccArgs  = @($exeDefine, ('/DQtVersion=' + $Version), ('/DQtStamp=' + $stamp), $outArg, $iss)
+$isccArgs  = @($exeDefine, ('/DQtVersion=' + $Version), ('/DQtFilename=' + $filename), $outArg)
+if ($SelfContained) {
+    $licenses = Join-Path (Split-Path -Parent $Exe) 'dotnet-licenses'
+    if (-not (Test-Path -LiteralPath $licenses -PathType Container)) {
+        throw "Published .NET runtime licenses not found: $licenses"
+    }
+    $isccArgs += if ($licenses -match '\s') { '/DQtRuntimeLicenses="' + $licenses + '"' } else { '/DQtRuntimeLicenses=' + $licenses }
+}
+$isccArgs += $iss
 
 Write-Host "ISCC    : $ISCC"
 Write-Host "Exe     : $Exe"
@@ -66,8 +76,7 @@ Write-Host "Version : $Version"
 & $ISCC @isccArgs
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
 
-$name = "QuickTranslate-$Version-win-x64-setup-$stamp.exe"
-$output = Join-Path $OutputDir $name
+$output = Join-Path $OutputDir "$filename.exe"
 if (-not (Test-Path -LiteralPath $output)) { throw "Expected output not found: $output" }
 $size = [math]::Round((Get-Item -LiteralPath $output).Length / 1MB, 2)
 Write-Host ''

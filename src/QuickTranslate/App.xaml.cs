@@ -185,7 +185,7 @@ public partial class App : System.Windows.Application
         }
 
         _result.ShowLoading("识别文字中…");
-        string recognized = await OcrService.RecognizeAsync(bitmap, token);
+        string recognized = await Task.Run(() => OcrService.RecognizeAsync(bitmap, token), token);
         token.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(recognized))
         {

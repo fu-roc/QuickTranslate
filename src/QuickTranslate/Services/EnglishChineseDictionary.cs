@@ -17,12 +17,15 @@ internal static partial class EnglishChineseDictionary
         string word = NormalizeWord(text);
         if (word.Length > 80 || !WordPattern().IsMatch(word)) return null;
 
-        var entries = await Entries.Value.WaitAsync(cancellationToken);
+        var entries = await GetEntriesAsync(cancellationToken);
         return entries.TryGetValue(word, out string? definitions) ? definitions.Split('\t') : null;
     }
 
     internal static string NormalizeWord(string text) =>
         text.AsSpan().Trim().Trim(SurroundingPunctuation).Trim().ToString().Replace('’', '\'');
+
+    internal static Task<IReadOnlyDictionary<string, string>> GetEntriesAsync(CancellationToken token) =>
+        Entries.Value.WaitAsync(token);
 
     [GeneratedRegex(@"\A[A-Za-z]+(?:['-][A-Za-z]+)*\z")]
     private static partial Regex WordPattern();

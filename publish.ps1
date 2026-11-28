@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build the portable QuickTranslate zip (single-file exe, README and license).
+  Build the Windows x64 QuickTranslate installers.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\publish.ps1
@@ -9,13 +9,14 @@
 [CmdletBinding()]
 param(
     [switch]$SelfContained,
-    [string]$OutputDir = ''
+    [string]$OutputDir = '',
+    [string]$ISCC
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
-if (-not $OutputDir) { $OutputDir = Join-Path $root 'artifacts' }
+if (-not $OutputDir) { $OutputDir = Join-Path $root 'artifacts\installers' }
 $OutputDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDir)
 
 $project = Join-Path $root 'src\QuickTranslate\QuickTranslate.csproj'
@@ -28,46 +29,34 @@ if (-not $dotnet) {
     else { throw '.NET 10 SDK not found. Install it or add dotnet to PATH.' }
 }
 
-$flavor = if ($SelfContained) { 'self-contained' } else { 'framework-dependent' }
-$name = "QuickTranslate-$(Get-Date -Format 'yyyyMMdd-HHmmss')-win-x64-$flavor"
-$staging = Join-Path $OutputDir $name
-$publishDir = Join-Path $staging 'QuickTranslate'
+$flavors = if ($SelfContained) { 'self-contained' } else { 'self-contained', 'runtime-required' }
+$staging = Join-Path (Split-Path -Parent $project) 'obj\installer'
+$buildInstaller = Join-Path $root 'build-installer.ps1'
 
-New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+foreach ($flavor in $flavors) {
+    $includeRuntime = $flavor -eq 'self-contained'
+    $publishDir = Join-Path $staging $flavor
 
-$publishArgs = @(
-    'publish', $project,
-    '-c', 'Release',
-    '-r', 'win-x64',
-    '--self-contained', $(if ($SelfContained) { 'true' } else { 'false' }),
-    '-p:PublishSingleFile=true',
-    '-p:IncludeNativeLibrariesForSelfExtract=true',
-    '-p:IncludeAllContentForSelfExtract=true',
-    '-p:DebugType=portable',
-    '-o', $publishDir
-)
+    $publishArgs = @(
+        'publish', $project,
+        '-c', 'Release',
+        '-r', 'win-x64',
+        '--self-contained', $includeRuntime.ToString().ToLowerInvariant(),
+        '-p:PublishSingleFile=true',
+        '-p:IncludeNativeLibrariesForSelfExtract=true',
+        '-p:IncludeAllContentForSelfExtract=true',
+        '-o', $publishDir
+    )
 
-Write-Host "Publishing [$flavor] ..."
-& $dotnet @publishArgs
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+    Write-Host "Publishing [$flavor] ..."
+    & $dotnet @publishArgs
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 
-$exe = Join-Path $publishDir 'QuickTranslate.exe'
-if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Published exe not found: $exe" }
-$readme = Join-Path $publishDir 'README.md'
-Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $readme
-$license = Join-Path $publishDir 'LICENSE'
-Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $license
+    $exe = Join-Path $publishDir 'QuickTranslate.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Published exe not found: $exe" }
+    if (Test-Path -LiteralPath (Join-Path $publishDir 'QuickTranslate.Tesseract.dll')) {
+        throw 'The published executable must include the Tesseract DLL.'
+    }
 
-$pdb = Join-Path $publishDir 'QuickTranslate.pdb'
-if (Test-Path -LiteralPath $pdb -PathType Leaf) {
-    Copy-Item -LiteralPath $pdb -Destination (Join-Path $OutputDir "$name.pdb")
+    & $buildInstaller -Exe $exe -OutputDir $OutputDir -ISCC $ISCC -SelfContained:$includeRuntime
 }
-
-$zip = Join-Path $OutputDir "$name.zip"
-# Pass the files, not the folder: Windows PowerShell 5.1 writes backslash-separated
-# entry names when archiving a directory, which breaks some unzip tools.
-Compress-Archive -LiteralPath $exe,$readme,$license -DestinationPath $zip -CompressionLevel Optimal
-
-$mb = [math]::Round((Get-Item -LiteralPath $zip).Length / 1MB, 1)
-Write-Host "OK: $zip ($mb MB)"
-Write-Host "Needs .NET 10 Desktop Runtime on target: $(-not $SelfContained)"
